@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ajg/form"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -28,9 +29,11 @@ func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 	}
 }
 
-func (c *Context) URL() *url.URL              { return c.r.URL }
-func (c *Context) Query() url.Values          { return c.URL().Query() }
-func (c *Context) GetParam(key string) string { return c.Query().Get(key) }
+func (c *Context) URL() *url.URL                        { return c.r.URL }
+func (c *Context) Query() url.Values                    { return c.URL().Query() }
+func (c *Context) GetParam(key string) string           { return c.Query().Get(key) }
+func (c *Context) GetChiParam(key string) string        { return chi.URLParam(c.r, key) }
+func (c *Context) GetChiParamRfomCtx(key string) string { return chi.URLParamFromCtx(c.Context(), key) }
 
 func (c *Context) JSON(status int, v any) {
 	buf := &bytes.Buffer{}
@@ -42,6 +45,32 @@ func (c *Context) JSON(status int, v any) {
 	}
 
 	c.Header().Set("Content-Type", "application/json")
+	c.WriteHeader(status)
+	_, _ = c.Write(buf.Bytes())
+}
+
+func (c *Context) XML(status int, v any) {
+	buf := &bytes.Buffer{}
+	enc := xml.NewEncoder(buf)
+	if err := enc.Encode(v); err != nil {
+		http.Error(c.w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	c.Header().Set("Content-Type", "application/xml")
+	c.WriteHeader(status)
+	_, _ = c.Write(buf.Bytes())
+}
+
+func (c *Context) FORM(status int, v any) {
+	buf := &bytes.Buffer{}
+	enc := form.NewEncoder(buf)
+	if err := enc.Encode(v); err != nil {
+		http.Error(c.w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	c.Header().Set("Content-Type", "application/x-www-form-urlencoded")
 	c.WriteHeader(status)
 	_, _ = c.Write(buf.Bytes())
 }
@@ -60,7 +89,18 @@ func (c *Context) Done() <-chan struct{}       { return c.r.Context().Done() }
 func (c *Context) Err() error                  { return c.r.Context().Err() }
 func (c *Context) Value(v any) any             { return c.r.Context().Value(v) }
 
-func (c *Context) Body() io.ReadCloser    { return c.body }
-func (c *Context) DecodeJSON(v any) error { return json.NewDecoder(c.Body()).Decode(v) }
-func (c *Context) DecodeXML(v any) error  { return xml.NewDecoder(c.Body()).Decode(v) }
-func (c *Context) DecodeForm(v any) error { return form.NewDecoder(c.Body()).Decode(v) }
+func (c *Context) Body() io.ReadCloser { return c.body }
+func (c *Context) DecodeJSON(v any) error {
+	defer c.CloseBody()
+	return json.NewDecoder(c.Body()).Decode(v)
+}
+func (c *Context) DecodeXML(v any) error {
+	defer c.CloseBody()
+	return xml.NewDecoder(c.Body()).Decode(v)
+}
+func (c *Context) DecodeForm(v any) error {
+	defer c.CloseBody()
+	return form.NewDecoder(c.Body()).Decode(v)
+}
+
+func (c *Context) CloseBody() error { return c.body.Close() }
