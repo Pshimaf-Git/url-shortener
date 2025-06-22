@@ -100,7 +100,7 @@ func TestNewRedirect(t *testing.T) {
 	})
 }
 
-func TestSave_DBHitOnly(t *testing.T) {
+func TestSave(t *testing.T) {
 	testCases := []struct {
 		name           string
 		dbBehavior     func(m *mocks.MockDatabase, req handlers.Request)
@@ -133,12 +133,39 @@ func TestSave_DBHitOnly(t *testing.T) {
 		},
 
 		{
-			name:    "empty alias",
+			name:    "empty alias, happy path(SaveGeneratedURl)",
 			request: handlers.Request{URL: "http://url.witout.alias"},
 			dbBehavior: func(m *mocks.MockDatabase, req handlers.Request) {
-				m.EXPECT().SaveURL(gomock.Any(), req.URL, gomock.Any()).Return(nil)
+				m.EXPECT().
+					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
+					Times(1).
+					Return("http://good", nil)
 			},
 			expectedStatus: http.StatusCreated,
+		},
+
+		{
+			name:    "empty alias, max retries error(SaveGeneratedURl)",
+			request: handlers.Request{URL: "http://url.witout.alias"},
+			dbBehavior: func(m *mocks.MockDatabase, req handlers.Request) {
+				m.EXPECT().
+					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
+					Times(1).
+					Return("", database.ErrMaxRetriesForGenerate)
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+
+		{
+			name:    "empty alias, interal database error(SaveGeneratedURl)",
+			request: handlers.Request{URL: "http://url.witout.alias"},
+			dbBehavior: func(m *mocks.MockDatabase, req handlers.Request) {
+				m.EXPECT().
+					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
+					Times(1).
+					Return("", ErrInternalDatabase)
+			},
+			expectedStatus: http.StatusInternalServerError,
 		},
 
 		{
