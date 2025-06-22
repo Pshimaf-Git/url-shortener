@@ -73,7 +73,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 						sl.Error(err),
 					)
 
-					c.JSON(http.StatusBadRequest, resp.Error(ErrCanNotGenAlias))
+					c.JSON(http.StatusInternalServerError, resp.Error(ErrCanNotGenAlias))
 
 					return
 				}
@@ -86,6 +86,11 @@ func (h *Handler) NewSave() http.HandlerFunc {
 			}
 
 			log.Info("added alias", slog.String("url", finalAlias), slog.String("alias", finalAlias))
+
+			c.JSON(http.StatusCreated, Responce{
+				Response: resp.OK(),
+				Alias:    finalAlias,
+			})
 
 		} else {
 			log = log.With(slog.String("url", url), slog.String("alias", userProvaidedAlias))
