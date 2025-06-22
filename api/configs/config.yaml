@@ -1,0 +1,25 @@
+env: dev
+
+server:
+  host: 0.0.0.0
+  port: '8000'
+  idle_timeout: 15m
+  read_timeout: 5m
+  write_timeout: 5m
+  std_alias_len: 5
+
+postgres:
+  host: postgres
+  name: postgres
+  port: '5432'
+  user: postgres
+  ssl_mode: disable
+
+redis:
+  host: redis
+  db: 0
+  port: '6379'
+  ttl: 10m
+
+logger:
+  level: debug

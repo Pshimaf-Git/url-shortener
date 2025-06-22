@@ -1,0 +1,25 @@
+env: local
+
+server:
+  host: 0.0.0.0
+  port: '5000'
+  idle_timeout: 1m
+  read_timeout: 1m
+  write_timeout: 1m
+  std_alias_len: 5
+
+postgres:
+  host: 0.0.0.0
+  name: postgres
+  port: '5432'
+  user: postgres
+  ssl_mode: disable
+
+redis:
+  host: 0.0.0.0
+  db: 0
+  port: '6379'
+  ttl: 1m
+
+logger:
+  level: info
