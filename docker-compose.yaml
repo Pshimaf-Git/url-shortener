@@ -1,0 +1,64 @@
+services:
+  app:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: url-shortener-app
+    ports:
+      - '8000:8000'
+    environment:
+      - CONFIG_PATH=configs/config.yaml
+      - REDIS_PASSWORD=redis
+      - POSTGRES_PASSWORD=postgres
+    depends_on:
+      - postgres
+      - redis
+    restart: on-failure
+    networks:
+      - app-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - '6379:6379'
+    command: redis-server --requirepass "${REDIS_PASS}" --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - '3000:8080'
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+    restart: on-failure
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
