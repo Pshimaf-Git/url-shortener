@@ -8,7 +8,6 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/random"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 )
 
@@ -16,6 +15,8 @@ type Responce struct {
 	resp.Response
 	Alias string `json:"alias"`
 }
+
+const maxRetries int = 10
 
 func (h *Handler) NewSave() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -38,18 +39,15 @@ func (h *Handler) NewSave() http.HandlerFunc {
 			return
 		}
 
-		alias := req.Alias
+		userProvaidedAlias := req.Alias
 		url := req.URL
+		stdLength := h.cfg.Server.StdAliasLen
 
 		if strings.EqualFold(url, "") {
 			log.Info("request without url")
 
 			c.JSON(http.StatusBadRequest, resp.Error(ErrEmprtyURl))
 			return
-		}
-
-		if strings.EqualFold(alias, "") {
-			alias = random.StringRandV2(h.cfg.Server.StdAliasLen)
 		}
 
 		if err := ValidateURLFormat(url); err != nil {
@@ -60,30 +58,61 @@ func (h *Handler) NewSave() http.HandlerFunc {
 			return
 		}
 
-		log = log.With(slog.String("url", url), slog.String("alias", alias))
+		var (
+			finalAlias string
+			err        error
+		)
 
-		log.Info("decoded requst body")
+		if strings.EqualFold(userProvaidedAlias, "") {
+			finalAlias, err = h.storage.SaveGeneratedURl(c.Context(), url, stdLength, maxRetries)
+			if err != nil {
+				if errors.Is(err, database.ErrMaxRetriesForGenerate) {
+					log.Error("generate randim alias",
+						slog.Int("max retries", maxRetries),
+						slog.Int("standart alias length", stdLength),
+						sl.Error(err),
+					)
 
-		err := h.storage.SaveURL(c.Context(), url, alias)
-		if err != nil {
-			if errors.Is(err, database.ErrURLExist) {
-				log.Info("alias already exist")
+					c.JSON(http.StatusBadRequest, resp.Error(ErrCanNotGenAlias))
 
-				c.JSON(http.StatusBadRequest, resp.Error(ErrAliasExist))
+					return
+				}
+
+				log.Error("saving URl with generated alias", slog.String("url", url), sl.Error(err))
+
+				c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
+
 				return
 			}
 
-			log.Error("url saver", sl.Error(err))
+			log.Info("added alias", slog.String("url", finalAlias), slog.String("alias", finalAlias))
 
-			c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
-			return
+		} else {
+			log = log.With(slog.String("url", url), slog.String("alias", userProvaidedAlias))
+
+			log.Info("decoded requst body")
+
+			err := h.storage.SaveURL(c.Context(), url, userProvaidedAlias)
+			if err != nil {
+				if errors.Is(err, database.ErrURLExist) {
+					log.Info("alias already exist")
+
+					c.JSON(http.StatusBadRequest, resp.Error(ErrAliasExist))
+					return
+				}
+
+				log.Error("url saver", sl.Error(err))
+
+				c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
+				return
+			}
+
+			log.Info("url added")
+
+			c.JSON(http.StatusCreated, Responce{
+				Response: resp.OK(),
+				Alias:    userProvaidedAlias,
+			})
 		}
-
-		log.Info("url added")
-
-		c.JSON(http.StatusCreated, Responce{
-			Response: resp.OK(),
-			Alias:    alias,
-		})
 	}
 }
