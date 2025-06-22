@@ -16,6 +16,7 @@ type URLDeleter interface {
 
 type URLSaver interface {
 	SaveURL(ctx context.Context, userURl string, alias string) error
+	SaveGeneratedURl(ctx context.Context, originalURL string, length, maxAttempts int) (string, error)
 }
 
 type Database interface {
@@ -27,6 +28,7 @@ type Database interface {
 }
 
 var (
-	ErrURLNotFound = errors.New("url not found")
-	ErrURLExist    = errors.New("url exists")
+	ErrURLNotFound           = errors.New("url not found")
+	ErrURLExist              = errors.New("url exists")
+	ErrMaxRetriesForGenerate = errors.New("max retries for generate unique alias")
 )
