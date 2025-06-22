@@ -1,3 +1,2 @@
-# Docker
-docker-compose.yaml
-*/Dockerfile
+# secrets
+*/*.env
