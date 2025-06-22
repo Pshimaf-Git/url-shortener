@@ -14,7 +14,6 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // New returns an error that formats as the given text. Each call to New returns a
@@ -87,7 +86,7 @@ func Wrap(fn string, msg string, err error) error {
 		return nil
 	}
 
-	if strings.EqualFold(msg, "") {
+	if msg == "" {
 		return fmt.Errorf("%s: %w", fn, err)
 	}
 
