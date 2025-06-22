@@ -80,6 +80,7 @@ var (
 	ErrInternalServer   = errors.New("internal server error")
 	ErrAliasExist       = errors.New("alias already exist")
 	ErrInvalidURLFormat = errors.New("invalid url format")
+	ErrCanNotGenAlias   = errors.New("could not generate random unique alias, please try again")
 )
 
 const (
