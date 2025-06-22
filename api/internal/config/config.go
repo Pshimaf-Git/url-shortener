@@ -71,8 +71,8 @@ func Load() (*Config, error) {
 		return nil, errors.Wrap(fn, cfgPath, err)
 	}
 
-	cfg.Postgres.Password = os.Getenv("POSTGRES_PASSWORD")
-	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
+	cfg.Postgres.Password = os.Getenv("POSTGRES_PASS")
+	cfg.Redis.Password = os.Getenv("REDIS_PASS")
 
 	return &cfg, nil
 }
