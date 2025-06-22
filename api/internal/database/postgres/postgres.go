@@ -10,9 +10,8 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/random"
+	"github.com/lib/pq"
 )
 
 var _ database.Database = &storage{}
@@ -33,6 +32,8 @@ const schema = `
 CREATE INDEX IF NOT EXISTS idx_alias ON urls(alias);
 `
 
+const pgUniqueConstraintViolation = "23505"
+
 func New(ctx context.Context, cfg *config.PostreSQLConfig) (*storage, error) {
 	const fn = "database.postgres.New"
 
@@ -44,76 +45,75 @@ func New(ctx context.Context, cfg *config.PostreSQLConfig) (*storage, error) {
 	}
 
 	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, errors.Wrap(fn, "db.Ping", err)
 	}
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
+		db.Close()
 		return nil, errors.Wrap(fn, "create table urls", err)
 	}
 
 	return &storage{db: db}, nil
 }
 
-func (s *storage) SaveURL(ctx context.Context, userURl string, alias string) error {
+func (s *storage) SaveURL(ctx context.Context, originalURL string, alias string) error {
 	const fn = "database.postgres.(*storage).SaveURL"
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Wrap(fn, "starts a transaction", err)
-	}
+	query := `INSERT INTO urls(url, alias) VALUES($1, $2)`
 
-	stmt, err := tx.PrepareContext(ctx, "SELECT id FROM urls WHERE alias=$1")
+	_, err := s.db.ExecContext(ctx, query, originalURL, alias)
 	if err != nil {
-		_ = tx.Rollback()
-		return errors.Wrap(fn, "prepare transaction select statement", err)
-	}
-
-	rows, err := stmt.QueryContext(ctx, alias)
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			_ = tx.Rollback()
-			return errors.Wrap(fn, "", err)
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) && pgErr.Code.Name() == pgUniqueConstraintViolation {
+			return errors.Wrap(fn, "alias already exists", database.ErrURLExist)
 		}
-	}
-	rows.Close()
 
-	stmt, err = tx.PrepareContext(ctx, "INSERT INTO urls(url, alias) VALUES($1, $2)")
-	if err != nil {
-		_ = tx.Rollback()
-		return errors.Wrap(fn, "prepare transaction insert statement", err)
+		return errors.Wrap(fn, "failed to save URL", err)
 	}
-
-	_, err = stmt.ExecContext(ctx, userURl, alias)
-	if err != nil {
-		_ = tx.Rollback()
-		return errors.Wrap(fn, "", database.ErrURLExist)
-	}
-
-	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
-		return errors.Wrap(fn, "transaction commit", err)
-	}
-
 	return nil
+}
+
+func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, length, maxAttempts int) (string, error) {
+	const fn = "database.postgres.(*storage).SaveGeneratedURl"
+
+	for i := 0; i < maxAttempts; i++ {
+		alias := random.StringRandV2(length)
+
+		query := `INSERT INTO urls(url, alias) VALUES($1, $2) RETURNING alias`
+
+		var insertedAlias string
+		row := s.db.QueryRowContext(ctx, query, originalURL, alias)
+
+		err := row.Scan(&insertedAlias)
+		if err == nil {
+			return insertedAlias, nil
+		}
+
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) && pgErr.Code.Name() == pgUniqueConstraintViolation {
+			continue
+		}
+
+		return "", errors.Wrap(fn, "", err)
+	}
+
+	return "", errors.Wrap(fn, "", database.ErrMaxRetriesForGenerate)
 }
 
 func (s *storage) GetURl(ctx context.Context, alias string) (string, error) {
 	const fn = "database.postgres.(*storage).GetURL"
 
-	stmt, err := s.db.PrepareContext(ctx, "SELECT url FROM urls WHERE alias=$1")
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", errors.Wrap(fn, "", database.ErrURLNotFound)
-		}
-
-		return "", errors.Wrap(fn, "", database.ErrURLNotFound)
-	}
-
-	row := stmt.QueryRowContext(ctx, alias)
+	row := s.db.QueryRowContext(ctx, "SELECT url FROM urls WHERE alias=$1", alias)
 
 	var url string
-	if err := row.Scan(&url); err != nil {
-		return "", errors.Wrap(fn, "", database.ErrURLNotFound)
+	err := row.Scan(&url)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errors.Wrap(fn, "url not found", database.ErrURLNotFound)
+		}
+
+		return "", errors.Wrap(fn, "failed to get URL", err)
 	}
 
 	return url, nil
