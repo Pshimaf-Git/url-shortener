@@ -2,8 +2,7 @@ package cache
 
 import (
 	"context"
-
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
+	"errors"
 )
 
 type Setter interface {

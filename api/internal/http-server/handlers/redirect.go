@@ -1,13 +1,13 @@
 package handlers
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 )
 

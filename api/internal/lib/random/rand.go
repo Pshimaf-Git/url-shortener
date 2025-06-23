@@ -2,11 +2,12 @@ package random
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	v2 "math/rand/v2"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 )
 
 var InvalidMax = errors.New("negative or zero max")
@@ -41,7 +42,7 @@ func StringCrypto(length int) (string, error) {
 	for i := range result {
 		n, err := Int64Crypto(int64(length))
 		if err != nil {
-			return "", errors.Wrap("StringCrypto", fmt.Sprintf("length: %d", length), err)
+			return "", wraper.Wrapf("StringCrypto", err, "length: %d", length)
 		}
 
 		result[i] = chars[n]
@@ -63,12 +64,12 @@ func MustStringCrypto(length int) string {
 // Int64Crypto return cryptographically strong random number (using crypto/rand).
 func Int64Crypto(max int64) (int64, error) {
 	if max <= 0 {
-		return 0, errors.Wrap("Int64Crypto", "", InvalidMax)
+		return 0, wraper.Wrap("Int64Crypto", InvalidMax)
 	}
 
 	nBig, err := rand.Int(rand.Reader, big.NewInt(max))
 	if err != nil {
-		return -1, errors.Wrap("Int64Crypto", "", err)
+		return -1, wraper.Wrap("Int64Crypto", err)
 	}
 
 	return nBig.Int64(), nil

@@ -1,16 +1,16 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 
-	"context"
-
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/random"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/lib/pq"
 )
 
@@ -37,21 +37,23 @@ const pgUniqueConstraintViolation = "23505"
 func New(ctx context.Context, cfg *config.PostreSQLConfig) (*storage, error) {
 	const fn = "database.postgres.New"
 
+	wp := wraper.New(fn)
+
 	connStr := BuildConnString(cfg)
 
 	db, err := sql.Open(postgresDriver, connStr)
 	if err != nil {
-		return nil, errors.Wrap(fn, "sql.Open", err)
+		return nil, wp.WrapMsg("sql.Open", err)
 	}
 
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, errors.Wrap(fn, "db.Ping", err)
+		return nil, wp.WrapMsg("db.Ping", err)
 	}
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
-		return nil, errors.Wrap(fn, "create table urls", err)
+		return nil, wp.WrapMsg("create table urls", err)
 	}
 
 	return &storage{db: db}, nil
@@ -60,22 +62,26 @@ func New(ctx context.Context, cfg *config.PostreSQLConfig) (*storage, error) {
 func (s *storage) SaveURL(ctx context.Context, originalURL string, alias string) error {
 	const fn = "database.postgres.(*storage).SaveURL"
 
+	wp := wraper.New(fn)
+
 	query := `INSERT INTO urls(url, alias) VALUES($1, $2)`
 
 	_, err := s.db.ExecContext(ctx, query, originalURL, alias)
 	if err != nil {
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) && pgErr.Code.Name() == pgUniqueConstraintViolation {
-			return errors.Wrap(fn, "alias already exists", database.ErrURLExist)
+			return wp.WrapMsg("alias already exists", database.ErrURLExist)
 		}
 
-		return errors.Wrap(fn, "failed to save URL", err)
+		return wp.WrapMsg("failed to save URL", err)
 	}
 	return nil
 }
 
 func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, length, maxAttempts int) (string, error) {
 	const fn = "database.postgres.(*storage).SaveGeneratedURl"
+
+	wp := wraper.New(fn)
 
 	for i := 0; i < maxAttempts; i++ {
 		alias := random.StringRandV2(length)
@@ -95,14 +101,16 @@ func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, leng
 			continue
 		}
 
-		return "", errors.Wrap(fn, "", err)
+		return "", wp.Wrap(err)
 	}
 
-	return "", errors.Wrap(fn, "", database.ErrMaxRetriesForGenerate)
+	return "", wp.Wrap(database.ErrMaxRetriesForGenerate)
 }
 
 func (s *storage) GetURl(ctx context.Context, alias string) (string, error) {
 	const fn = "database.postgres.(*storage).GetURL"
+
+	wp := wraper.New(fn)
 
 	row := s.db.QueryRowContext(ctx, "SELECT url FROM urls WHERE alias=$1", alias)
 
@@ -110,10 +118,10 @@ func (s *storage) GetURl(ctx context.Context, alias string) (string, error) {
 	err := row.Scan(&url)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", errors.Wrap(fn, "url not found", database.ErrURLNotFound)
+			return "", wp.WrapMsg("url not found", database.ErrURLNotFound)
 		}
 
-		return "", errors.Wrap(fn, "failed to get URL", err)
+		return "", wp.WrapMsg("failed to get URL", err)
 	}
 
 	return url, nil
@@ -122,19 +130,21 @@ func (s *storage) GetURl(ctx context.Context, alias string) (string, error) {
 func (s *storage) DeleteURL(ctx context.Context, alias string) (int64, error) {
 	const fn = "database.postgres.(*storage).DeleteURL"
 
+	wp := wraper.New(fn)
+
 	stmt, err := s.db.PrepareContext(ctx, "DELETE FROM urls WHERE alias=$1")
 	if err != nil {
-		return 0, errors.Wrap(fn, "prepare dalete statement", err)
+		return 0, wp.WrapMsg("prepare delete statement", err)
 	}
 
 	res, err := stmt.ExecContext(ctx, alias)
 	if err != nil {
-		return 0, errors.Wrap(fn, "", err)
+		return 0, wp.Wrap(err)
 	}
 
 	n, err := res.RowsAffected()
 	if err != nil {
-		return 0, errors.Wrap(fn, "get last insert id", err)
+		return 0, wp.WrapMsg("get last insert id", err)
 	}
 
 	return n, nil
@@ -143,8 +153,10 @@ func (s *storage) DeleteURL(ctx context.Context, alias string) (int64, error) {
 func (s *storage) Close() error {
 	const fn = "database.postgres.(*storage).Close"
 
+	wp := wraper.New(fn)
+
 	if err := s.db.Close(); err != nil {
-		return errors.Wrap(fn, "db.Close", err)
+		return wp.WrapMsg("db.Close", err)
 	}
 
 	return nil

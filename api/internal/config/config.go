@@ -1,13 +1,14 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -59,16 +60,18 @@ var ErrEmptyConfigPath = errors.New("config path must not be emprty")
 func Load() (*Config, error) {
 	const fn = "Load"
 
+	wp := wraper.New(fn)
+
 	cfgPath := featcheCfgPath()
 
 	if err := validatePath(cfgPath); err != nil {
-		return nil, errors.Wrap(fn, cfgPath, err)
+		return nil, wp.WrapMsg(cfgPath, err)
 	}
 
 	var cfg Config
 
 	if err := cleanenv.ReadConfig(cfgPath, &cfg); err != nil {
-		return nil, errors.Wrap(fn, cfgPath, err)
+		return nil, wp.WrapMsg(cfgPath, err)
 	}
 
 	cfg.Postgres.Password = os.Getenv("POSTGRES_PASS")

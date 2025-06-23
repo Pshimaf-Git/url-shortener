@@ -2,14 +2,15 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/url"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 )
 
 type Handler struct {
@@ -31,6 +32,8 @@ func New(storage database.Database, cache cache.Cache, cfg *config.Config, log *
 func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, error) {
 	const fn = "handlers.handler.(*Handler).GetURLWithCache"
 
+	wp := wraper.New(fn)
+
 	url, err := h.cache.Get(ctx, alias)
 	if err == nil {
 		h.cache.Expire(ctx, alias)
@@ -38,15 +41,15 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 	}
 
 	if !errors.Is(err, cache.ErrKeyNotExist) {
-		return "", errors.Wrap(fn, "", err)
+		return "", wp.Wrap(err)
 	}
 
 	url, err = h.storage.GetURl(ctx, alias)
 	if err != nil {
 		if errors.Is(err, database.ErrURLNotFound) {
-			return "", errors.Wrap(fn, "", err)
+			return "", wp.Wrap(err)
 		}
-		return "", errors.Wrap(fn, "", err)
+		return "", wp.Wrap(err)
 	}
 
 	if err := h.cache.Set(ctx, alias, url); err != nil {
