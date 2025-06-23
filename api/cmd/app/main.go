@@ -70,7 +70,7 @@ func realMain(ctx context.Context) error {
 
 	cache, err := redis.New(&cfg.Redis)
 
-	h := handlers.New(db, cache, cfg, log)
+	h := handlers.New(db, cache, &cfg.Server, log)
 
 	mws := []func(http.Handler) http.Handler{
 		logger.New(log),
