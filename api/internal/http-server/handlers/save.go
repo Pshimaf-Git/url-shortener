@@ -41,7 +41,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 
 		userProvaidedAlias := req.Alias
 		url := req.URL
-		stdLength := h.cfg.Server.StdAliasLen
+		stdLength := h.cfg.StdAliasLen
 
 		if strings.EqualFold(url, "") {
 			log.Info("request without url")
