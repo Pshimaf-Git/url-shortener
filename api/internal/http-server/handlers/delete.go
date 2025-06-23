@@ -52,18 +52,22 @@ func (h *Handler) NewDelete() http.HandlerFunc {
 
 		log.Info("url deleted from database")
 
-		log.Info("start a cache goroutine deleter")
+		if err := h.cache.Delete(c.Context(), alias); err != nil {
+			if errors.Is(err, cache.ErrKeyNotExist) {
+				log.Info("alias alredy deleted or not found")
+			} else {
+				log.Error("delete from cache", sl.Error(err))
 
-		go func() {
-			if err := h.cache.Delete(c.Context(), alias); err != nil {
-				if errors.Is(err, cache.ErrKeyNotExist) {
-					log.Info("alias alredy deleted or not found")
-					return
-				}
+				c.JSON(http.StatusInternalServerError, Responce{
+					Response: resp.Error(ErrInternalServer),
+					Alias:    alias,
+				})
 
-				log.Error("deleting from cache", sl.Error(err))
+				return
 			}
-		}()
+		}
+
+		log.Error("deleted from cache", sl.Error(err))
 
 		c.JSON(http.StatusOK, Responce{
 			Response: resp.OK(),
