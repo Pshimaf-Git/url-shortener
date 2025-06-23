@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 )
@@ -48,7 +50,20 @@ func (h *Handler) NewDelete() http.HandlerFunc {
 			return
 		}
 
-		log.Info("url deleted")
+		log.Info("url deleted from database")
+
+		log.Info("start a cache goroutine deleter")
+
+		go func() {
+			if err := h.cache.Delete(c.Context(), alias); err != nil {
+				if errors.Is(err, cache.ErrKeyNotExist) {
+					log.Info("alias alredy deleted or not found")
+					return
+				}
+
+				log.Error("deleting from cache", sl.Error(err))
+			}
+		}()
 
 		c.JSON(http.StatusOK, Responce{
 			Response: resp.OK(),
