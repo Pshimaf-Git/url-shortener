@@ -14,9 +14,10 @@ import (
 // Interface implementation checks at compile time
 // Ensures redisClient satisfies all required cache interfaces
 var (
-	_ cache.Setter = &redisClient{} // Verify Setter interface implementation
-	_ cache.Getter = &redisClient{} // Verify Getter interface implementation
-	_ cache.Cache  = &redisClient{} // Verify full Cache interface implementation
+	_ cache.Setter  = &redisClient{} // Verify Setter interface implementation
+	_ cache.Getter  = &redisClient{} // Verify Getter interface implementation
+	_ cache.Deleter = &redisClient{} // Verify Deleter interface implementation
+	_ cache.Cache   = &redisClient{} // Verify full Cache interface implementation
 )
 
 // redisClient implements Redis-based caching
@@ -38,7 +39,7 @@ func New(cfg *config.RedisCongig) (*redisClient, error) {
 
 // Set stores a key-value pair in Redis with configured TTL
 func (r *redisClient) Set(ctx context.Context, key string, value any) error {
-	const fn = "cache.redis.(*cache).Set"
+	const fn = "cache.redis.(*redisClient).Set"
 
 	wp := wraper.New(fn)
 
@@ -55,7 +56,7 @@ func (r *redisClient) Set(ctx context.Context, key string, value any) error {
 
 // Get retrieves a value from Redis by key
 func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
-	const fn = "cache.redis.(*cache).Get"
+	const fn = "cache.redis.(*redisClient).Get"
 
 	wp := wraper.New(fn)
 
@@ -72,7 +73,7 @@ func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (r *redisClient) Expire(ctx context.Context, key string) error {
-	const fn = "cache.redis.(*cache).Expire"
+	const fn = "cache.redis.(*redisClient).Expire"
 
 	wp := wraper.New(fn)
 
@@ -87,9 +88,25 @@ func (r *redisClient) Expire(ctx context.Context, key string) error {
 	return nil
 }
 
+// Delete delete value from redis by key
+func (r *redisClient) Delete(ctx context.Context, key string) error {
+	const fn = "cache.redis.(*redisClient).Delete"
+
+	wp := wraper.New(fn)
+
+	if err := r.rdb.Del(ctx, key).Err(); err != nil {
+		if err == redis.Nil {
+			return cache.ErrKeyNotExist
+		}
+		return wp.Wrapf(err, "key=%s", key)
+	}
+
+	return nil
+}
+
 // Close terminates the Redis connection
 func (r *redisClient) Close() error {
-	const fn = "cache.redis.(*cache).Close"
+	const fn = "cache.redis.(*redisClient).Close"
 
 	wp := wraper.New(fn)
 
