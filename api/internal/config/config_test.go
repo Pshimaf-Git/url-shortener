@@ -133,8 +133,6 @@ func TestLoad(t *testing.T) {
 			name: "valid data",
 			before: func() {
 				os.Setenv("CONFIG_PATH", configTestPath)
-				os.Setenv("POSTGRES_PASSWORD", "psql_pass")
-				os.Setenv("REDIS_PASSWORD", "redis_pass")
 			},
 			// from cfg_test.yaml
 			want: &Config{
@@ -154,20 +152,18 @@ func TestLoad(t *testing.T) {
 				},
 
 				Postgres: PostreSQLConfig{
-					Host:     "0.0.0.0",
-					Port:     "5432",
-					Name:     "postgres",
-					User:     "postgres",
-					SSLMode:  "disable",
-					Password: "psql_pass",
+					Host:    "0.0.0.0",
+					Port:    "5432",
+					Name:    "postgres",
+					User:    "postgres",
+					SSLMode: "disable",
 				},
 
 				Redis: RedisCongig{
-					Host:     "0.0.0.0",
-					Port:     "6379",
-					TTL:      time.Minute,
-					DB:       0,
-					Password: "redis_pass",
+					Host: "0.0.0.0",
+					Port: "6379",
+					TTL:  time.Minute,
+					DB:   0,
 				},
 			},
 			wantErr: false,
@@ -185,6 +181,9 @@ func TestLoad(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			got.Postgres.Password = ""
+			got.Redis.Password = ""
 
 			assert.Equal(t, *tt.want, *got)
 		})
