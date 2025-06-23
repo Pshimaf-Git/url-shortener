@@ -21,7 +21,12 @@ type Expirer interface {
 	Expire(ctx context.Context, key string) error
 }
 
+type Deleter interface {
+	Delete(ctx context.Context, key string) error
+}
+
 type Cache interface {
+	Deleter
 	Setter
 	Getter
 	Expirer
