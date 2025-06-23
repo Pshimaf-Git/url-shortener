@@ -2,11 +2,13 @@ package handlers_tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
@@ -35,7 +37,7 @@ var (
 )
 
 var (
-	discardCfg = &config.Config{}
+	discardCfg = &config.ServerConfig{}
 )
 
 func TestNewHandler(t *testing.T) {
@@ -209,11 +211,11 @@ func TestSave(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-
 	testCases := []struct {
 		name           string
 		alias          string
 		dbBehavior     func(m *mocks.MockDatabase, alias string)
+		caheBehavior   func(c *cachemock.MockCache, alias string)
 		expectedStatus int
 	}{
 		{
@@ -221,6 +223,11 @@ func TestDelete(t *testing.T) {
 			alias: "alias",
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().DeleteURL(gomock.Any(), alias).Return(hasDel, nil)
+			},
+			caheBehavior: func(c *cachemock.MockCache, alias string) {
+				c.EXPECT().Delete(gomock.Any(), alias).
+					Times(1).
+					Return(nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -231,6 +238,9 @@ func TestDelete(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().DeleteURL(gomock.Any(), alias).Return(noDel, nil)
 			},
+			caheBehavior: func(c *cachemock.MockCache, alias string) {
+				c.EXPECT().Delete(gomock.Any(), alias).Times(0)
+			},
 			expectedStatus: http.StatusBadRequest,
 		},
 
@@ -239,6 +249,21 @@ func TestDelete(t *testing.T) {
 			alias: "valid",
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().DeleteURL(gomock.Any(), alias).Return(noDel, ErrInternalDatabase)
+			},
+			caheBehavior: func(c *cachemock.MockCache, alias string) {
+				c.EXPECT().Delete(gomock.Any(), alias).Times(0)
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+
+		{
+			name:  "internal cache error",
+			alias: "alias",
+			dbBehavior: func(m *mocks.MockDatabase, alias string) {
+				m.EXPECT().DeleteURL(gomock.Any(), alias).Return(hasDel, nil)
+			},
+			caheBehavior: func(c *cachemock.MockCache, alias string) {
+				c.EXPECT().Delete(gomock.Any(), alias).Times(1).Return(ErrInternalDatabase)
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
@@ -253,6 +278,10 @@ func TestDelete(t *testing.T) {
 
 			if tt.dbBehavior != nil {
 				tt.dbBehavior(dbMock, tt.alias)
+			}
+
+			if tt.caheBehavior != nil {
+				tt.caheBehavior(mockCache, tt.alias)
 			}
 
 			q := url.Values{}
@@ -278,7 +307,7 @@ func TestRedirect(t *testing.T) {
 		name          string
 		alias         string
 		dbBehavior    func(m *mocks.MockDatabase, alias string)
-		cacheBehavior func(c *cachemock.MockCache, alias string)
+		cacheBehavior func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup)
 		wantStatus    int
 		wantRedirect  bool
 	}{
@@ -288,10 +317,16 @@ func TestRedirect(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().GetURl(gomock.Any(), alias).Return("http://something.com", nil)
 			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string) {
+			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
+				wg.Add(1)
+
 				c.EXPECT().Get(gomock.Any(), alias).Return("", cache.ErrKeyNotExist)
 				c.EXPECT().Expire(gomock.Any(), gomock.Any()).Times(0)
-				c.EXPECT().Set(gomock.Any(), alias, "http://something.com").Return(nil)
+				c.EXPECT().Set(gomock.Any(), alias, "http://something.com").
+					Do(func(_ context.Context, _ string, _ any) {
+						defer wg.Done()
+					}).
+					Return(nil)
 			},
 			wantStatus:   http.StatusFound,
 			wantRedirect: true,
@@ -302,7 +337,7 @@ func TestRedirect(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().GetURl(gomock.Any(), gomock.Any()).Times(0)
 			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string) {
+			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
 				c.EXPECT().Get(gomock.Any(), alias).Return("http://cached.com", nil)
 				c.EXPECT().Expire(gomock.Any(), gomock.Any()).Times(1).Return(nil)
 				c.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
@@ -316,10 +351,11 @@ func TestRedirect(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().GetURl(gomock.Any(), gomock.Any()).Times(0)
 			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string) {
+			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
 				c.EXPECT().Get(gomock.Any(), gomock.Any()).Times(0)
 				c.EXPECT().Expire(gomock.Any(), gomock.Any()).Times(0)
-				c.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+				c.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			wantStatus:   http.StatusBadRequest,
 			wantRedirect: false,
@@ -330,7 +366,7 @@ func TestRedirect(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().GetURl(gomock.Any(), alias).Return("", database.ErrURLNotFound)
 			},
-			cacheBehavior: func(m *cachemock.MockCache, alias string) {
+			cacheBehavior: func(m *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
 				m.EXPECT().Get(gomock.Any(), alias).Return("", cache.ErrKeyNotExist)
 				m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 			},
@@ -343,25 +379,12 @@ func TestRedirect(t *testing.T) {
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
 				m.EXPECT().GetURl(gomock.Any(), alias).Return("", errors.New("db error"))
 			},
-			cacheBehavior: func(m *cachemock.MockCache, alias string) {
+			cacheBehavior: func(m *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
 				m.EXPECT().Get(gomock.Any(), alias).Return("", cache.ErrKeyNotExist)
 				m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 			},
 			wantStatus:   http.StatusInternalServerError,
 			wantRedirect: false,
-		},
-		{
-			name:  "cache set error",
-			alias: "valid",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Return("http://something.com", nil)
-			},
-			cacheBehavior: func(m *cachemock.MockCache, alias string) {
-				m.EXPECT().Get(gomock.Any(), alias).Return("", cache.ErrKeyNotExist)
-				m.EXPECT().Set(gomock.Any(), alias, "http://something.com").Return(errors.New("cache set error"))
-			},
-			wantStatus:   http.StatusFound,
-			wantRedirect: true,
 		},
 	}
 
@@ -372,13 +395,14 @@ func TestRedirect(t *testing.T) {
 
 			dbMock := mocks.NewMockDatabase(ctrl)
 			cacheMock := cachemock.NewMockCache(ctrl)
+			var wg = &sync.WaitGroup{}
 
 			if tt.dbBehavior != nil {
 				tt.dbBehavior(dbMock, tt.alias)
 			}
 
 			if tt.cacheBehavior != nil {
-				tt.cacheBehavior(cacheMock, tt.alias)
+				tt.cacheBehavior(cacheMock, tt.alias, wg)
 			}
 
 			q := url.Values{}
@@ -393,6 +417,8 @@ func TestRedirect(t *testing.T) {
 
 			redirector := h.NewRedirect()
 			redirector(w, r)
+
+			wg.Wait()
 
 			assert.Equal(t, tt.wantStatus, w.Code)
 			assert.Equal(t, tt.wantRedirect, wasRedirect(w))
@@ -452,6 +478,7 @@ func TestHandlers_SaveRedirectDelete_HappyPath(t *testing.T) {
 		}
 
 		{
+
 			q := url.Values{}
 			q.Add("alias", request.Alias)
 
@@ -461,6 +488,9 @@ func TestHandlers_SaveRedirectDelete_HappyPath(t *testing.T) {
 			deleter := h.NewDelete()
 
 			dbMock.EXPECT().DeleteURL(gomock.Any(), gomock.Any()).Times(1).Return(hasDel, nil)
+			cacheMock.EXPECT().Delete(gomock.Any(), gomock.Any()).
+				Times(1).
+				Return(nil)
 
 			deleter(w, r)
 
