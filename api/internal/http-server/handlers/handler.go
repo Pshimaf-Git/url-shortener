@@ -16,11 +16,11 @@ import (
 type Handler struct {
 	cache   cache.Cache
 	storage database.Database
-	cfg     *config.Config
 	log     *slog.Logger
+	cfg     *config.ServerConfig
 }
 
-func New(storage database.Database, cache cache.Cache, cfg *config.Config, log *slog.Logger) *Handler {
+func New(storage database.Database, cache cache.Cache, cfg *config.ServerConfig, log *slog.Logger) *Handler {
 	return &Handler{
 		storage: storage,
 		cache:   cache,
@@ -52,23 +52,29 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 		return "", wp.Wrap(err)
 	}
 
-	if err := h.cache.Set(ctx, alias, url); err != nil {
-		h.log.Error("cache URL",
-			slog.String("key", alias),
-			slog.String("value", url),
-			sl.Error(err),
-		)
-	}
+	h.log.Info("starting a setter goroutine", slog.String("alias", alias), slog.String("url", url))
+
+	go func() {
+		if err := h.cache.Set(ctx, alias, url); err != nil {
+			if errors.Is(err, cache.ErrKeyNotExist) {
+				h.log.Info("alias not found in cache", slog.String("alias", alias))
+				return
+			}
+
+			h.log.Error("cache URL",
+				slog.String("key", alias),
+				slog.String("value", url),
+				sl.Error(err),
+			)
+		}
+	}()
 
 	return url, nil
 }
 
 func ValidateURLFormat(urlToCheck string) error {
-	if _, err := url.ParseRequestURI(urlToCheck); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := url.ParseRequestURI(urlToCheck)
+	return err
 }
 
 type Request struct {
