@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/internal/http-server/handlers"
 	"github.com/Pshimaf-Git/url-shortener/internal/http-server/middleware/logger"
 	"github.com/Pshimaf-Git/url-shortener/internal/http-server/server"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -98,7 +99,7 @@ func realMain(ctx context.Context) error {
 func setupLogger(cfg *config.Config) (*slog.Logger, error) {
 	lvl, err := cfg.LevelFromString()
 	if err != nil {
-		return nil, errors.Wrap("setupLogger", "", err)
+		return nil, wraper.Wrap("setupLogger", err)
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Env)) {

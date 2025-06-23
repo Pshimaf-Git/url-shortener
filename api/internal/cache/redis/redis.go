@@ -2,13 +2,12 @@ package redis
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strings"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/errors"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -41,12 +40,14 @@ func New(cfg *config.RedisCongig) (*redisClient, error) {
 func (r *redisClient) Set(ctx context.Context, key string, value any) error {
 	const fn = "cache.redis.(*cache).Set"
 
+	wp := wraper.New(fn)
+
 	if strings.EqualFold(key, "") {
-		return errors.Wrap(fn, "", cache.ErrEmptyKey)
+		return wp.Wrap(cache.ErrEmptyKey)
 	}
 
 	if err := r.rdb.Set(ctx, key, value, r.cfg.TTL).Err(); err != nil {
-		return errors.Wrap(fn, fmt.Sprintf("key=%s val=%v", key, value), err)
+		return wp.Wrapf(err, "key=%s val=%v", key, value)
 	}
 
 	return nil
@@ -56,13 +57,15 @@ func (r *redisClient) Set(ctx context.Context, key string, value any) error {
 func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 	const fn = "cache.redis.(*cache).Get"
 
+	wp := wraper.New(fn)
+
 	value, err := r.rdb.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return "", errors.Wrap(fn, fmt.Sprintf("key=%s", key), cache.ErrKeyNotExist)
+			return "", wp.Wrapf(cache.ErrKeyNotExist, "key=%s", key)
 		}
 
-		return "", errors.Wrap(fn, fmt.Sprintf("key=%s", key), err)
+		return "", wp.Wrapf(err, "key=%s", key)
 	}
 
 	return value, nil
@@ -71,12 +74,14 @@ func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 func (r *redisClient) Expire(ctx context.Context, key string) error {
 	const fn = "cache.redis.(*cache).Expire"
 
+	wp := wraper.New(fn)
+
 	err := r.rdb.Expire(ctx, key, r.cfg.TTL).Err()
 	if err != nil {
 		if err == redis.Nil {
 			return cache.ErrKeyNotExist
 		}
-		return errors.Wrap(fn, fmt.Sprintf("key=%s", key), err)
+		return wp.Wrapf(err, "key=%s", key)
 	}
 
 	return nil
@@ -85,10 +90,13 @@ func (r *redisClient) Expire(ctx context.Context, key string) error {
 // Close terminates the Redis connection
 func (r *redisClient) Close() error {
 	const fn = "cache.redis.(*cache).Close"
+
+	wp := wraper.New(fn)
+
 	if r.rdb == nil {
 		return nil
 	}
 	r.rdb.Expire(context.Background(), "", 0)
 
-	return errors.Wrap(fn, "", r.rdb.Close())
+	return wp.Wrap(r.rdb.Close())
 }
