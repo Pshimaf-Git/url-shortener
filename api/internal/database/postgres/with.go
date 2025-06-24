@@ -3,6 +3,7 @@ package postgres
 import (
 	"time"
 
+	"github.com/Pshimaf-Git/url-shortener/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,52 +17,52 @@ const (
 
 type OptFunc func(*pgxpool.Config)
 
-func WithMaxConns(max int32) OptFunc {
-	if max <= 0 {
-		max = defaultMaxConn
+func WithMaxConns(cfg *config.PostreSQLConfig) OptFunc {
+	if cfg.Options.MaxConns <= 0 {
+		cfg.Options.MaxConns = defaultMaxConn
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConns = max
+		c.MaxConns = int32(cfg.Options.MaxConns)
 	}
 }
 
-func WithMinConns(min int32) OptFunc {
-	if min <= 0 {
-		min = defaultMinConn
+func WithMinConns(cfg *config.PostreSQLConfig) OptFunc {
+	if cfg.Options.MinConns <= 0 {
+		cfg.Options.MinConns = defaultMinConn
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MinConns = min
+		c.MinConns = int32(cfg.Options.MinConns)
 	}
 }
 
-func WithCheckHelth(period time.Duration) OptFunc {
-	if period <= time.Duration(0) {
-		period = defaultCheckHelthPeriod
+func WithCheckHelth(cfg *config.PostreSQLConfig) OptFunc {
+	if cfg.Options.CheckHelthPeriod <= time.Duration(0) {
+		cfg.Options.CheckHelthPeriod = defaultCheckHelthPeriod
 	}
 
 	return func(c *pgxpool.Config) {
-		c.HealthCheckPeriod = period
+		c.HealthCheckPeriod = cfg.Options.CheckHelthPeriod
 	}
 }
 
-func WithMaxConnIdleTime(t time.Duration) OptFunc {
-	if t <= time.Duration(0) {
-		t = defaultMaxConnIdleTime
+func WithMaxConnIdleTime(cfg *config.PostreSQLConfig) OptFunc {
+	if cfg.Options.MaxConnIdleTime <= time.Duration(0) {
+		cfg.Options.MaxConnIdleTime = defaultMaxConnIdleTime
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConnIdleTime = t
+		c.MaxConnIdleTime = cfg.Options.MaxConnIdleTime
 	}
 }
 
-func WithMaxConnLifetime(t time.Duration) OptFunc {
-	if t <= time.Duration(0) {
-		t = defaultMaxConnLifeTime
+func WithMaxConnLifetime(cfg *config.PostreSQLConfig) OptFunc {
+	if cfg.Options.MaxConnLifetime <= time.Duration(0) {
+		cfg.Options.MaxConnLifetime = defaultMaxConnLifeTime
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConnLifetime = t
+		c.MaxConnLifetime = cfg.Options.MaxConnLifetime
 	}
 }
