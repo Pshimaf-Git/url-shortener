@@ -75,7 +75,7 @@ func realMain(ctx context.Context) error {
 	}
 	defer db.Close()
 
-	cache, err := redis.New(&cfg.Redis)
+	cache, err := redis.New(ctx, &cfg.Redis)
 
 	h := handlers.New(db, cache, &cfg.Server, log)
 
