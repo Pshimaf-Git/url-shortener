@@ -26,7 +26,7 @@ var (
 
 const (
 	maxPingRetries = 5
-	pingTimeout    = time.Millisecond * 500
+	pingTimeout    = time.Second
 )
 
 // redisClient implements Redis-based caching
