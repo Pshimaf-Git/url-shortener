@@ -21,6 +21,6 @@ COPY --from=builder /app/bin/url-shortener .
 
 COPY configs/config.yaml /app/configs/config.yaml
 
-EXPOSE 8080
+EXPOSE 8000
 
 CMD [ "./url-shortener" ]
