@@ -111,8 +111,7 @@ func pingWithRetries(ctx context.Context, p *pgxpool.Pool) error {
 	for ; i < maxPingRetries; i++ {
 		if err := p.Ping(ctx); err != nil {
 			slog.Error("pool.Ping",
-				slog.Int("attempts left",
-					maxPingRetries-i),
+				slog.Int("attempts left", maxPingRetries-i),
 				sl.Error(err),
 			)
 
