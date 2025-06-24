@@ -41,7 +41,7 @@ const pgconnUniqueConstraintViolation = "23505"
 
 const (
 	maxPingRetries = 5
-	pingTimeout    = time.Millisecond * 100
+	pingTimeout    = time.Millisecond * 500
 )
 
 func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*storage, error) {
