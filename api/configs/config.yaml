@@ -14,6 +14,12 @@ postgres:
   port: '5432'
   user: postgres
   ssl_mode: disable
+  options:
+    max_conns: 24
+    min_conns: 7
+    max_conn_life_time: 1m
+    max_conn_idle_time: 2m
+    check_helth_period: 3m
 
 redis:
   host: redis
