@@ -2,11 +2,15 @@ package redis
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/redis/go-redis/v9"
 )
@@ -20,6 +24,11 @@ var (
 	_ cache.Cache   = &redisClient{} // Verify full Cache interface implementation
 )
 
+const (
+	maxPingRetries = 5
+	pingTimeout    = time.Millisecond * 500
+)
+
 // redisClient implements Redis-based caching
 type redisClient struct {
 	cfg *config.RedisCongig
@@ -27,14 +36,54 @@ type redisClient struct {
 }
 
 // New creates and returns a new Redis client instance
-func New(cfg *config.RedisCongig) (*redisClient, error) {
+func New(ctx context.Context, cfg *config.RedisCongig) (*redisClient, error) {
+	const fn = "cache.redis.(*redisClient).New"
+
+	wp := wraper.New(fn)
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     net.JoinHostPort(cfg.Host, cfg.Port),
 		Password: cfg.Password,
 		DB:       cfg.DB,
 	})
 
+	if err := pingWithRetries(ctx, rdb); err != nil {
+		return nil, wp.Wrap(err)
+	}
+
 	return &redisClient{rdb: rdb, cfg: cfg}, nil
+}
+
+func pingWithRetries(ctx context.Context, rdb *redis.Client) error {
+	const fn = "cache.redis.(*redisClient).pingWithRetries"
+
+	wp := wraper.New(fn)
+
+	if rdb == nil {
+		return wp.Wrap(errors.New("nil redis client"))
+	}
+
+	var i int
+	for ; i < maxPingRetries; i++ {
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			slog.Error("redis.Client.Ping",
+				slog.Int("attempts left", maxPingRetries-i),
+				sl.Error(err),
+			)
+
+			time.Sleep(pingTimeout)
+			continue
+		}
+
+		break
+	}
+
+	if i == maxPingRetries {
+		rdb.Close()
+		return wp.Wrap(errors.New("db.Ping, maxPingRetries"))
+	}
+
+	return nil
 }
 
 // Set stores a key-value pair in Redis with configured TTL
