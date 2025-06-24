@@ -39,6 +39,8 @@ func (h *Handler) NewSave() http.HandlerFunc {
 			return
 		}
 
+		log.Info("decoded requst body", slog.Any("request body", req))
+
 		userProvaidedAlias := req.Alias
 		url := req.URL
 		stdLength := h.cfg.StdAliasLen
@@ -85,7 +87,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 				return
 			}
 
-			log.Info("added alias", slog.String("url", finalAlias), slog.String("alias", finalAlias))
+			log.Info("added alias", slog.String("url", url), slog.String("alias", finalAlias))
 
 			c.JSON(http.StatusCreated, Responce{
 				Response: resp.OK(),
@@ -94,8 +96,6 @@ func (h *Handler) NewSave() http.HandlerFunc {
 
 		} else {
 			log = log.With(slog.String("url", url), slog.String("alias", userProvaidedAlias))
-
-			log.Info("decoded requst body")
 
 			err := h.storage.SaveURL(c.Context(), url, userProvaidedAlias)
 			if err != nil {
