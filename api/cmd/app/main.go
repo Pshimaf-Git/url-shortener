@@ -62,7 +62,14 @@ func realMain(ctx context.Context) error {
 
 	log.Info("server starting", slog.String("env", cfg.Env), slog.String("host", cfg.Server.Host), slog.String("port", cfg.Server.Port))
 
-	db, err := postgres.New(ctx, &cfg.Postgres)
+	db, err := postgres.New(ctx, &cfg.Postgres,
+		postgres.WithMaxConns(&cfg.Postgres),
+		postgres.WithMinConns(&cfg.Postgres),
+		postgres.WithMaxConnLifetime(&cfg.Postgres),
+		postgres.WithMaxConnIdleTime(&cfg.Postgres),
+		postgres.WithCheckHelth(&cfg.Postgres),
+	)
+
 	if err != nil {
 		return err
 	}
