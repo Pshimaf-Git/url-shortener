@@ -8,6 +8,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNew(t *testing.T) {
+	t.Run("New", func(t *testing.T) {
+		const fn = "TestFunc"
+		wp := New(fn)
+		assert.NotNil(t, wp)
+		assert.Equal(t, wp.FuncName, fn)
+	})
+}
+
+func TestWraper_Wrap(t *testing.T) {
+	tests := []struct {
+		name     string
+		fn       string
+		err      error
+		wantErr  bool
+		wantCont string
+	}{
+		{
+			name:    "nil error returns nil",
+			fn:      "TestFunc",
+			err:     nil,
+			wantErr: false,
+		},
+		{
+			name:     "wraps error correctly",
+			fn:       "TestFunc",
+			err:      errors.New("original error"),
+			wantErr:  true,
+			wantCont: "TestFunc: original error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test Wraper struct method
+			wp := New(tt.fn)
+			err := wp.Wrap(tt.err)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Equal(t, tt.wantCont, err.Error())
+				assert.ErrorIs(t, err, tt.err)
+			}
+		})
+	}
+}
+
 func TestWraper_WrapMsg(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -57,24 +105,77 @@ func TestWraper_WrapMsg(t *testing.T) {
 				assert.Contains(t, err.Error(), s)
 			}
 			assert.ErrorIs(t, err, tt.err)
-
-			// Test standalone functions
-			err = WrapMsg(tt.funcName, tt.msg, tt.err)
-			if !tt.wantErr {
-				assert.NoError(t, err)
-				return
-			}
-
-			require.Error(t, err)
-			for _, s := range tt.wantContain {
-				assert.Contains(t, err.Error(), s)
-			}
-			assert.ErrorIs(t, err, tt.err)
 		})
 	}
 }
 
-func TestWraper_Wrap(t *testing.T) {
+func TestWraper_Wrapf(t *testing.T) {
+	type input struct {
+		err    error
+		format string
+		args   []any
+	}
+	testCases := []struct {
+		name     string
+		fn       string
+		input    input
+		wantErr  bool
+		wantCont string
+	}{
+		{
+			name: "base case",
+			fn:   "TestFunc",
+			input: input{
+				err:    errors.New("error"),
+				format: "format -> %s, %d",
+				args:   []any{"hello", 200},
+			},
+			wantErr:  true,
+			wantCont: "TestFunc: format -> hello, 200: error",
+		},
+
+		{
+			name: "nil input error",
+			fn:   "TestFunc",
+			input: input{
+				err:    nil,
+				format: "%s",
+				args:   []any{"<nil>"},
+			},
+			wantErr:  false,
+			wantCont: "",
+		},
+
+		{
+			name: "empty format string",
+			fn:   "TestFunc",
+			input: input{
+				err:    errors.New("error"),
+				format: "",
+				args:   []any{},
+			},
+			wantErr:  true,
+			wantCont: "TestFunc: error",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			wp := New(tt.fn)
+			err := wp.Wrapf(tt.input.err, tt.input.format, tt.input.args...)
+
+			if !tt.wantErr {
+				assert.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Equal(t, tt.wantCont, err.Error())
+				assert.ErrorIs(t, err, tt.input.err)
+			}
+		})
+	}
+}
+
+func TestWrap(t *testing.T) {
 	tests := []struct {
 		name     string
 		fn       string
@@ -99,19 +200,7 @@ func TestWraper_Wrap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test Wraper struct method
-			wp := New(tt.fn)
-			err := wp.Wrap(tt.err)
-			if !tt.wantErr {
-				assert.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				assert.Equal(t, tt.wantCont, err.Error())
-				assert.ErrorIs(t, err, tt.err)
-			}
-
-			// Test standalone function
-			err = Wrap(tt.fn, tt.err)
+			err := Wrap(tt.fn, tt.err)
 			if !tt.wantErr {
 				assert.NoError(t, err)
 			} else {
@@ -123,20 +212,118 @@ func TestWraper_Wrap(t *testing.T) {
 	}
 }
 
+func TestWrapMsg(t *testing.T) {
+	tests := []struct {
+		name        string
+		funcName    string
+		msg         string
+		err         error
+		wantErr     bool
+		wantContain []string // expected substrings in error message
+	}{
+		{
+			name:     "nil error returns nil",
+			funcName: "TestFunc",
+			msg:      "some message",
+			err:      nil,
+			wantErr:  false,
+		},
+		{
+			name:        "with message wraps correctly",
+			funcName:    "TestFunc",
+			msg:         "something failed",
+			err:         errors.New("original error"),
+			wantErr:     true,
+			wantContain: []string{"TestFunc", "something failed", "original error"},
+		},
+		{
+			name:        "empty message omits message part",
+			funcName:    "TestFunc",
+			msg:         "",
+			err:         errors.New("original error"),
+			wantErr:     true,
+			wantContain: []string{"TestFunc", "original error"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := WrapMsg(tt.funcName, tt.msg, tt.err)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			for _, s := range tt.wantContain {
+				assert.Contains(t, err.Error(), s)
+			}
+			assert.ErrorIs(t, err, tt.err)
+		})
+	}
+}
+
 func TestWrapf(t *testing.T) {
-	var ErrOriginal = errors.New("original error")
+	type input struct {
+		fn     string
+		err    error
+		format string
+		args   []any
+	}
+	testCases := []struct {
+		name     string
+		input    input
+		wantErr  bool
+		wantCont string
+	}{
+		{
+			name: "base case",
+			input: input{
+				fn:     "TestFunc",
+				err:    errors.New("error"),
+				format: "format -> %s, %d",
+				args:   []any{"hello", 200},
+			},
+			wantErr:  true,
+			wantCont: "TestFunc: format -> hello, 200: error",
+		},
 
-	t.Run("formats message correctly", func(t *testing.T) {
-		err := Wrapf("TestFunc", ErrOriginal, "formatted %d %s", 42, "message")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "TestFunc")
-		assert.Contains(t, err.Error(), "formatted 42 message")
-		assert.Contains(t, err.Error(), "original error")
-		assert.ErrorIs(t, err, ErrOriginal)
-	})
+		{
+			name: "nil input error",
+			input: input{
+				fn:     "TestFunc",
+				err:    nil,
+				format: "%s",
+				args:   []any{"<nil>"},
+			},
+			wantErr:  false,
+			wantCont: "",
+		},
 
-	t.Run("nil error", func(t *testing.T) {
-		err := Wrapf("TestFunc", nil, "formatted %v", "hello world")
-		assert.NoError(t, err)
-	})
+		{
+			name: "empty format string",
+			input: input{
+				fn:     "TestFunc",
+				err:    errors.New("error"),
+				format: "",
+				args:   []any{},
+			},
+			wantErr:  true,
+			wantCont: "TestFunc: error",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Wrapf(tt.input.fn, tt.input.err, tt.input.format, tt.input.args...)
+
+			if !tt.wantErr {
+				assert.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Equal(t, tt.wantCont, err.Error())
+				assert.ErrorIs(t, err, tt.input.err)
+			}
+		})
+	}
 }
