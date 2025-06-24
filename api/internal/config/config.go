@@ -35,12 +35,21 @@ type ServerConfig struct {
 }
 
 type PostreSQLConfig struct {
-	Host     string `yaml:"host" env:"POSTGRES_HOST" env-default:"localhost"`
-	Name     string `yaml:"name" env:"POSTGRES_DB" env-default:"postgres"`
-	User     string `yaml:"user" env:"POSTGRES_USER" env-default:"postgres"`
-	Port     string `yaml:"port" env:"POSTGRES_PORT" env-default:"5432"`
-	SSLMode  string `yaml:"ssl_mode" env:"POSTGRES_SSLMODE" env-default:"enable"`
-	Password string `env:"POSTGRES_PASSWORD"`
+	Host     string                   `yaml:"host" env:"POSTGRES_HOST" env-default:"localhost"`
+	Name     string                   `yaml:"name" env:"POSTGRES_DB" env-default:"postgres"`
+	User     string                   `yaml:"user" env:"POSTGRES_USER" env-default:"postgres"`
+	Port     string                   `yaml:"port" env:"POSTGRES_PORT" env-default:"5432"`
+	SSLMode  string                   `yaml:"ssl_mode" env:"POSTGRES_SSLMODE" env-default:"enable"`
+	Password string                   `env:"POSTGRES_PASSWORD"`
+	Options  OptionalPostgreSQLConfig `yaml:"options"`
+}
+
+type OptionalPostgreSQLConfig struct {
+	MaxConns         int           `yaml:"max_conns" env:"MAX_CONNS"`
+	MinConns         int           `yaml:"min_conns" env:"MIN_CONNS"`
+	MaxConnIdleTime  time.Duration `yaml:"max_conn_idle_time" env:"MAX_CONN_IDLE_TIME"`
+	MaxConnLifetime  time.Duration `yaml:"max_conn_life_time" env:"MAX_CONN_LIFE_TIME"`
+	CheckHelthPeriod time.Duration `yaml:"check_helth_period" env:"CHECK_HELTH_PERIOD"`
 }
 
 type RedisCongig struct {
