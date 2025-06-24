@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
@@ -12,6 +13,8 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 )
+
+const setCacheTimeout = time.Second
 
 type Handler struct {
 	cache   cache.Cache
@@ -54,8 +57,12 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 
 	h.log.Info("starting a setter goroutine", slog.String("alias", alias), slog.String("url", url))
 
+	setCtx, cancel := context.WithTimeout(context.Background(), setCacheTimeout)
+
 	go func() {
-		if err := h.cache.Set(ctx, alias, url); err != nil {
+		defer cancel()
+
+		if err := h.cache.Set(setCtx, alias, url); err != nil {
 			if errors.Is(err, cache.ErrKeyNotExist) {
 				h.log.Info("alias not found in cache", slog.String("alias", alias))
 				return
