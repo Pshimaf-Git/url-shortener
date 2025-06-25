@@ -117,6 +117,14 @@ func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, leng
 
 	wp := wraper.New(fn)
 
+	if originalURL == "" {
+		return "", wp.Wrap(errors.New("url must not be empty"))
+	}
+
+	if length <= 0 {
+		return "", wp.Wrap(errors.New("invlid alias length"))
+	}
+
 	for i := 0; i < maxAttempts; i++ {
 		alias := random.StringRandV2(length)
 
