@@ -24,16 +24,6 @@ type storage struct {
 
 const postgresDriver = "postgres"
 
-const schema = `
-	CREATE TABLE IF NOT EXISTS urls (
-  id BIGSERIAL PRIMARY KEY,
-  url TEXT NOT NULL,
-  alias TEXT NOT NULL UNIQUE
-);
-
-CREATE INDEX IF NOT EXISTS idx_alias ON urls(alias);
-`
-
 const pgconnUniqueConstraintViolation = "23505"
 
 func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*storage, error) {
@@ -55,11 +45,6 @@ func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*st
 
 	if err := ping(ctx, pool); err != nil {
 		return nil, wp.Wrap(err)
-	}
-
-	if _, err := pool.Exec(ctx, schema); err != nil {
-		pool.Close()
-		return nil, wp.WrapMsg("create table urls", err)
 	}
 
 	return &storage{pool: pool}, nil
