@@ -1,5 +1,6 @@
 services:
   app:
+    image: 'url-shortener'
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -9,12 +10,12 @@ services:
     ports:
       - '8000:8000'
     environment:
-      - CONFIG_PATH=configs/config.yaml
-      - REDIS_PASSWORD=redis
-      - POSTGRES_PASSWORD=postgres
+      - CONFIG_PATH=${CONFIG_PATH}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: on-failure
     networks:
       - app-net
@@ -22,11 +23,16 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 3s
+      retries: 5
     env_file:
       - ./.env
     environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASS}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -39,6 +45,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
     env_file:
       - ./.env
     ports:
@@ -56,7 +67,8 @@ services:
     ports:
       - '3000:8080'
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app-net
     restart: on-failure
