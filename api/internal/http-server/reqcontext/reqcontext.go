@@ -3,6 +3,7 @@ package reqcontext
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
 	"io"
@@ -33,7 +34,7 @@ func (c *ReqContext) URL() *url.URL                 { return c.r.URL }
 func (c *ReqContext) Query() url.Values             { return c.URL().Query() }
 func (c *ReqContext) GetParam(key string) string    { return c.Query().Get(key) }
 func (c *ReqContext) GetChiParam(key string) string { return chi.URLParam(c.r, key) }
-func (c *ReqContext) GetChiParamRfomCtx(key string) string {
+func (c *ReqContext) GetChiParamFromCtx(key string) string {
 	return chi.URLParamFromCtx(c.Context(), key)
 }
 
@@ -91,7 +92,7 @@ func (c *ReqContext) Done() <-chan struct{}       { return c.r.Context().Done() 
 func (c *ReqContext) Err() error                  { return c.r.Context().Err() }
 func (c *ReqContext) Value(v any) any             { return c.r.Context().Value(v) }
 
-func (c *ReqContext) Body() io.ReadCloser { return c.body }
+func (c *ReqContext) Body() io.ReadCloser { return c.r.Body }
 func (c *ReqContext) DecodeJSON(v any) error {
 	defer c.CloseBody()
 	return json.NewDecoder(c.Body()).Decode(v)
@@ -106,3 +107,16 @@ func (c *ReqContext) DecodeForm(v any) error {
 }
 
 func (c *ReqContext) CloseBody() error { return c.body.Close() }
+
+func (c *ReqContext) Form() url.Values          { return c.r.Form }
+func (c *ReqContext) Method() string            { return c.r.Method }
+func (c *ReqContext) URI() string               { return c.r.RequestURI }
+func (c *ReqContext) UserAgent() string         { return c.r.UserAgent() }
+func (c *ReqContext) Host() string              { return c.r.Host }
+func (c *ReqContext) Pattern() string           { return c.r.Pattern }
+func (c *ReqContext) TLS() *tls.ConnectionState { return c.r.TLS }
+func (c *ReqContext) ContentLength() int64      { return c.r.ContentLength }
+
+func (c *ReqContext) Proto() string   { return c.r.Proto }
+func (c *ReqContext) ProtoMajor() int { return c.r.ProtoMajor }
+func (c *ReqContext) ProtoMinor() int { return c.r.ProtoMinor }
