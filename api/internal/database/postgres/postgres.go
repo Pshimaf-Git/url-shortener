@@ -99,6 +99,10 @@ func ping(ctx context.Context, p *pgxpool.Pool) error {
 
 	wp := wraper.New(fn)
 
+	if p == nil {
+		return wp.Wrap(errors.New("nil pgx pool"))
+	}
+
 	if err := p.Ping(ctx); err != nil {
 		p.Close()
 		return wp.Wrap(errors.New("db.Ping"))
