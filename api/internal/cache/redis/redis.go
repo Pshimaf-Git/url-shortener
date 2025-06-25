@@ -47,7 +47,7 @@ func New(ctx context.Context, cfg *config.RedisCongig) (*redisClient, error) {
 }
 
 func ping(ctx context.Context, rdb *redis.Client) error {
-	const fn = "cache.redis.(*redisClient).pingWithRetries"
+	const fn = "cache.redis.(*redisClient).ping"
 
 	wp := wraper.New(fn)
 
@@ -57,7 +57,7 @@ func ping(ctx context.Context, rdb *redis.Client) error {
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		rdb.Close()
-		return wp.Wrap(errors.New("redis.client..Ping"))
+		return wp.Wrap(errors.New("redis.client.Ping"))
 	}
 
 	return nil
