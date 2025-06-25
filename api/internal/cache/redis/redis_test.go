@@ -2,304 +2,183 @@ package redis
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/redis/go-redis/v9"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// NOTE:
-//
-// BEFORE EXEC THESE COMMAND IN TETMINAL
-//
-// docker run --name TEST-REDIS -p 6379:6379 -d redis:7.0-alpine
-//
-// these command create a docker container with pistgres database for test
-//
-// AFTER EXEC THESE COMMAND
-//
-// docker stop TEST-REDIS && docker rm TEST-REDIS
+func setupTestRedis(t *testing.T) (*redisClient, *miniredis.Miniredis) {
+	t.Helper()
 
-func setupTestRedis(t *testing.T) (*redisClient, context.Context, func()) {
+	// Create miniredis instance
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+
+	// Create config with miniredis address
 	cfg := &config.RedisCongig{
 		Host:     "localhost",
-		Port:     "6379",
+		Port:     mr.Port(),
 		Password: "",
-		DB:       1,
+		DB:       0,
 		TTL:      10 * time.Minute,
 	}
 
-	ctx := context.Background()
-	client, err := New(ctx, cfg)
+	// Create client
+	client, err := New(context.Background(), cfg)
 	require.NoError(t, err)
 
-	// Clear test database
-	err = client.rdb.FlushDB(ctx).Err()
-	require.NoError(t, err)
-
-	return client, ctx, func() {
-		client.Close()
-	}
+	return client, mr
 }
 
 func TestNew(t *testing.T) {
-	tests := []struct {
-		name      string
-		cfg       *config.RedisCongig
-		wantError error
-	}{
-		{
-			name: "Success - valid config",
-			cfg: &config.RedisCongig{
-				Host: "localhost",
-				Port: "6379",
-				DB:   1,
-			},
-		},
-		{
-			name: "Error - invalid host",
-			cfg: &config.RedisCongig{
-				Host: "invalid-host",
-				Port: "6379",
-			},
-			wantError: errors.New("redis.client.Ping"),
-		},
-		{
-			name: "Error - invalid port",
-			cfg: &config.RedisCongig{
-				Host: "localhost",
-				Port: "99999",
-			},
-			wantError: errors.New("redis.client.Ping"),
-		},
-	}
+	t.Run("successful connection", func(t *testing.T) {
+		client, mr := setupTestRedis(t)
+		defer mr.Close()
+		defer client.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			_, err := New(ctx, tt.cfg)
+		assert.NotNil(t, client.rdb)
+		assert.Equal(t, client.cfg.TTL, 10*time.Minute)
+	})
 
-			if tt.wantError != nil {
-				assert.ErrorContains(t, err, tt.wantError.Error())
-				return
-			}
-			assert.NoError(t, err)
-		})
-	}
+	t.Run("connection failure", func(t *testing.T) {
+		cfg := &config.RedisCongig{
+			Host:     "invalid",
+			Port:     "1234",
+			Password: "",
+			DB:       0,
+			TTL:      10 * time.Minute,
+		}
+
+		client, err := New(context.Background(), cfg)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+	})
 }
 
 func TestSet(t *testing.T) {
-	client, ctx, teardown := setupTestRedis(t)
-	defer teardown()
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
 
-	tests := []struct {
-		name      string
-		key       string
-		value     string
-		wantError error
-	}{
-		{
-			name:  "Success - set key-value",
-			key:   "test-key",
-			value: "test-value",
-		},
-		{
-			name:      "Error - empty key",
-			key:       "",
-			value:     "test-value",
-			wantError: cache.ErrEmptyKey,
-		},
-	}
+	ctx := context.Background()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := client.Set(ctx, tt.key, tt.value)
+	t.Run("successful set", func(t *testing.T) {
+		err := client.Set(ctx, "test-key", "test-value")
+		assert.NoError(t, err)
 
-			if tt.wantError != nil {
-				assert.ErrorIs(t, err, tt.wantError)
-				return
-			}
+		// Verify value in miniredis
+		val, err := mr.Get("test-key")
+		assert.NoError(t, err)
+		assert.Equal(t, "test-value", val)
 
-			assert.NoError(t, err)
-			// Verify the value was set
-			got, err := client.rdb.Get(ctx, tt.key).Result()
-			assert.NoError(t, err)
-			assert.Equal(t, tt.value, got)
-		})
-	}
+		// Verify TTL was set
+		ttl := mr.TTL("test-key")
+		assert.Greater(t, ttl, time.Duration(0))
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		err := client.Set(ctx, "", "value")
+		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
 }
 
 func TestGet(t *testing.T) {
-	client, ctx, teardown := setupTestRedis(t)
-	defer teardown()
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
 
-	// Setup test data
-	testKey := "existing-key"
-	testValue := "test-value"
-	err := client.Set(ctx, testKey, testValue)
-	require.NoError(t, err)
+	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		key       string
-		want      string
-		wantError error
-	}{
-		{
-			name: "Success - get existing key",
-			key:  testKey,
-			want: testValue,
-		},
-		{
-			name:      "Error - non-existent key",
-			key:       "non-existent-key",
-			wantError: cache.ErrKeyNotExist,
-		},
-	}
+	t.Run("successful get", func(t *testing.T) {
+		mr.Set("existing-key", "existing-value")
+		mr.SetTTL("existing-key", 10*time.Minute)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := client.Get(ctx, tt.key)
+		val, err := client.Get(ctx, "existing-key")
+		assert.NoError(t, err)
+		assert.Equal(t, "existing-value", val)
+	})
 
-			if tt.wantError != nil {
-				assert.ErrorIs(t, err, tt.wantError)
-				return
-			}
+	t.Run("key not found", func(t *testing.T) {
+		_, err := client.Get(ctx, "non-existent-key")
+		assert.ErrorIs(t, err, cache.ErrKeyNotExist)
+	})
 
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	t.Run("empty key", func(t *testing.T) {
+		_, err := client.Get(ctx, "")
+		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
 }
 
 func TestExpire(t *testing.T) {
-	client, ctx, teardown := setupTestRedis(t)
-	defer teardown()
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
 
-	// Setup test data
-	testKey := "expire-test-key"
-	err := client.Set(ctx, testKey, "test-value")
-	require.NoError(t, err)
+	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		key       string
-		wantError error
-	}{
-		{
-			name: "Success - set expiration on existing key",
-			key:  testKey,
-		},
-		{
-			name:      "Error - non-existent key",
-			key:       "non-existent-key",
-			wantError: cache.ErrKeyNotExist,
-		},
-	}
+	t.Run("successful expire", func(t *testing.T) {
+		mr.Set("test-key", "test-value")
+		initialTTL := time.Second
+		mr.SetTTL("test-key", initialTTL)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := client.Expire(ctx, tt.key)
+		err := client.Expire(ctx, "test-key")
+		assert.NoError(t, err)
 
-			if tt.wantError != nil {
-				assert.ErrorIs(t, err, tt.wantError)
-				return
-			}
+		newTTL := mr.TTL("test-key")
+		assert.Equal(t, client.cfg.TTL, newTTL)
+	})
 
-			assert.NoError(t, err)
-			// Verify TTL was set
-			ttl, err := client.rdb.TTL(ctx, tt.key).Result()
-			assert.NoError(t, err)
-			assert.Greater(t, ttl, time.Duration(0))
-		})
-	}
+	t.Run("key not found", func(t *testing.T) {
+		err := client.Expire(ctx, "non-existent-key")
+		assert.ErrorIs(t, err, cache.ErrKeyNotExist)
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		err := client.Expire(ctx, "")
+		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
 }
 
 func TestDelete(t *testing.T) {
-	client, ctx, teardown := setupTestRedis(t)
-	defer teardown()
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
 
-	// Setup test data
-	testKey := "delete-test-key"
-	err := client.Set(ctx, testKey, "test-value")
-	require.NoError(t, err)
+	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		key       string
-		wantError error
-	}{
-		{
-			name: "Success - delete existing key",
-			key:  testKey,
-		},
-		{
-			name:      "Error - non-existent key",
-			key:       "non-existent-key",
-			wantError: cache.ErrKeyNotExist,
-		},
-	}
+	t.Run("successful delete", func(t *testing.T) {
+		mr.Set("to-delete", "value")
+		assert.True(t, mr.Exists("to-delete"))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := client.Delete(ctx, tt.key)
+		err := client.Delete(ctx, "to-delete")
+		assert.NoError(t, err)
+		assert.False(t, mr.Exists("to-delete"))
+	})
 
-			if tt.wantError != nil {
-				assert.ErrorIs(t, err, tt.wantError)
-				return
-			}
+	t.Run("key not found", func(t *testing.T) {
+		err := client.Delete(ctx, "non-existent-key")
+		assert.ErrorIs(t, err, cache.ErrKeyNotExist)
+	})
 
-			assert.NoError(t, err)
-			// Verify key was deleted
-			_, err = client.rdb.Get(ctx, tt.key).Result()
-			assert.ErrorIs(t, err, redis.Nil)
-		})
-	}
+	t.Run("empty key", func(t *testing.T) {
+		err := client.Delete(ctx, "")
+		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
 }
 
 func TestClose(t *testing.T) {
-	client, ctx, _ := setupTestRedis(t)
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
 
-	tests := []struct {
-		name      string
-		setup     func() *redisClient
-		wantError bool
-	}{
-		{
-			name: "Success - close connection",
-			setup: func() *redisClient {
-				return client
-			},
-		},
-		{
-			name: "Success - nil client",
-			setup: func() *redisClient {
-				return &redisClient{rdb: nil}
-			},
-		},
-	}
+	err := client.Close()
+	assert.NoError(t, err)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.setup()
-			err := c.Close()
-
-			if tt.wantError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			// Verify connection is closed
-			if c.rdb != nil {
-				err = c.rdb.Ping(ctx).Err()
-				assert.Error(t, err)
-			}
-		})
-	}
+	// Verify connection is closed by trying to perform an operation
+	err = client.Set(context.Background(), "test", "value")
+	assert.Error(t, err)
 }
