@@ -69,7 +69,7 @@ func (r *redisClient) Set(ctx context.Context, key string, value any) error {
 
 	wp := wraper.New(fn)
 
-	if strings.EqualFold(key, "") {
+	if isEmpty(key) {
 		return wp.Wrap(cache.ErrEmptyKey)
 	}
 
@@ -85,6 +85,10 @@ func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 	const fn = "cache.redis.(*redisClient).Get"
 
 	wp := wraper.New(fn)
+
+	if isEmpty(key) {
+		return "", wp.Wrap(cache.ErrEmptyKey)
+	}
 
 	value, err := r.rdb.Get(ctx, key).Result()
 	if err != nil {
@@ -103,12 +107,22 @@ func (r *redisClient) Expire(ctx context.Context, key string) error {
 
 	wp := wraper.New(fn)
 
-	err := r.rdb.Expire(ctx, key, r.cfg.TTL).Err()
-	if err != nil {
-		if err == redis.Nil {
-			return wp.Wrap(cache.ErrKeyNotExist)
-		}
+	if isEmpty(key) {
+		return wp.Wrap(cache.ErrEmptyKey)
+	}
+
+	cmd := r.rdb.Expire(ctx, key, r.cfg.TTL)
+	if err := cmd.Err(); err != nil {
 		return wp.Wrapf(err, "key=%s", key)
+	}
+
+	expiredSet, err := cmd.Result()
+	if err != nil {
+		return wp.Wrapf(err, "key=%s", key)
+	}
+
+	if !expiredSet {
+		return wp.Wrap(cache.ErrKeyNotExist)
 	}
 
 	return nil
@@ -120,11 +134,23 @@ func (r *redisClient) Delete(ctx context.Context, key string) error {
 
 	wp := wraper.New(fn)
 
-	if err := r.rdb.Del(ctx, key).Err(); err != nil {
-		if err == redis.Nil {
-			return wp.Wrap(cache.ErrKeyNotExist)
-		}
+	if isEmpty(key) {
+		return wp.Wrap(cache.ErrEmptyKey)
+	}
+
+	cmd := r.rdb.Del(ctx, key)
+	if err := cmd.Err(); err != nil {
 		return wp.Wrapf(err, "key=%s", key)
+	}
+
+	n, err := cmd.Result()
+
+	if err != nil {
+		return wp.Wrapf(err, "key=%s", key)
+	}
+
+	if n == 0 {
+		return wp.Wrapf(cache.ErrKeyNotExist, "key=%s", key)
 	}
 
 	return nil
@@ -141,4 +167,8 @@ func (r *redisClient) Close() error {
 	}
 
 	return wp.Wrap(r.rdb.Close())
+}
+
+func isEmpty(key string) bool {
+	return strings.TrimSpace(key) == ""
 }
