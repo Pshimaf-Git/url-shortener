@@ -3,14 +3,11 @@ package redis
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 	"github.com/redis/go-redis/v9"
 )
@@ -22,11 +19,6 @@ var (
 	_ cache.Getter  = &redisClient{} // Verify Getter interface implementation
 	_ cache.Deleter = &redisClient{} // Verify Deleter interface implementation
 	_ cache.Cache   = &redisClient{} // Verify full Cache interface implementation
-)
-
-const (
-	maxPingRetries = 5
-	pingTimeout    = time.Second
 )
 
 // redisClient implements Redis-based caching
@@ -47,14 +39,14 @@ func New(ctx context.Context, cfg *config.RedisCongig) (*redisClient, error) {
 		DB:       cfg.DB,
 	})
 
-	if err := pingWithRetries(ctx, rdb); err != nil {
+	if err := ping(ctx, rdb); err != nil {
 		return nil, wp.Wrap(err)
 	}
 
 	return &redisClient{rdb: rdb, cfg: cfg}, nil
 }
 
-func pingWithRetries(ctx context.Context, rdb *redis.Client) error {
+func ping(ctx context.Context, rdb *redis.Client) error {
 	const fn = "cache.redis.(*redisClient).pingWithRetries"
 
 	wp := wraper.New(fn)
@@ -63,24 +55,9 @@ func pingWithRetries(ctx context.Context, rdb *redis.Client) error {
 		return wp.Wrap(errors.New("nil redis client"))
 	}
 
-	var i int
-	for ; i < maxPingRetries; i++ {
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			slog.Error("redis.Client.Ping",
-				slog.Int("attempts left", maxPingRetries-i),
-				sl.Error(err),
-			)
-
-			time.Sleep(pingTimeout)
-			continue
-		}
-
-		break
-	}
-
-	if i == maxPingRetries {
+	if err := rdb.Ping(ctx).Err(); err != nil {
 		rdb.Close()
-		return wp.Wrap(errors.New("db.Ping, maxPingRetries"))
+		return wp.Wrap(errors.New("redis.client..Ping"))
 	}
 
 	return nil
