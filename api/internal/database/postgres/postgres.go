@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +13,6 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/random"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 )
 
@@ -39,11 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_alias ON urls(alias);
 
 const pgconnUniqueConstraintViolation = "23505"
 
-const (
-	maxPingRetries = 5
-	pingTimeout    = time.Second
-)
-
 func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*storage, error) {
 	const fn = "database.postgres.New"
 
@@ -61,7 +53,7 @@ func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*st
 		return nil, wp.WrapMsg("pgxpool.NewWithConfig", err)
 	}
 
-	if err := pingWithRetries(ctx, pool); err != nil {
+	if err := ping(ctx, pool); err != nil {
 		return nil, wp.Wrap(err)
 	}
 
@@ -102,32 +94,18 @@ func executeOptFuncs(c *pgxpool.Config, opts ...OptFunc) {
 	}
 }
 
-func pingWithRetries(ctx context.Context, p *pgxpool.Pool) error {
-	const fn = "database.postgres.pingWithRetries"
+func ping(ctx context.Context, p *pgxpool.Pool) error {
+	const fn = "database.postgres.ping"
 
 	wp := wraper.New(fn)
 
-	var i int
-	for ; i < maxPingRetries; i++ {
-		if err := p.Ping(ctx); err != nil {
-			slog.Error("pool.Ping",
-				slog.Int("attempts left", maxPingRetries-i),
-				sl.Error(err),
-			)
-
-			time.Sleep(pingTimeout)
-			continue
-		}
-
-		break
-	}
-
-	if i == maxPingRetries {
+	if err := p.Ping(ctx); err != nil {
 		p.Close()
-		return wp.Wrap(errors.New("db.Ping, maxPingRetries"))
+		return wp.Wrap(errors.New("db.Ping"))
 	}
 
 	return nil
+
 }
 
 func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, length, maxAttempts int) (string, error) {
@@ -195,6 +173,10 @@ func (s *storage) DeleteURL(ctx context.Context, alias string) (int64, error) {
 }
 
 func (s *storage) Close() error {
+	if s.pool == nil {
+		return nil
+	}
+
 	s.pool.Close()
 	return nil
 }
