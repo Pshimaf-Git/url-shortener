@@ -106,7 +106,7 @@ func (r *redisClient) Expire(ctx context.Context, key string) error {
 	err := r.rdb.Expire(ctx, key, r.cfg.TTL).Err()
 	if err != nil {
 		if err == redis.Nil {
-			return cache.ErrKeyNotExist
+			return wp.Wrap(cache.ErrKeyNotExist)
 		}
 		return wp.Wrapf(err, "key=%s", key)
 	}
@@ -122,7 +122,7 @@ func (r *redisClient) Delete(ctx context.Context, key string) error {
 
 	if err := r.rdb.Del(ctx, key).Err(); err != nil {
 		if err == redis.Nil {
-			return cache.ErrKeyNotExist
+			return wp.Wrap(cache.ErrKeyNotExist)
 		}
 		return wp.Wrapf(err, "key=%s", key)
 	}
@@ -139,7 +139,6 @@ func (r *redisClient) Close() error {
 	if r.rdb == nil {
 		return nil
 	}
-	r.rdb.Expire(context.Background(), "", 0)
 
 	return wp.Wrap(r.rdb.Close())
 }
