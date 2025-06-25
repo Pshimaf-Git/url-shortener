@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/database"
+	"github.com/Pshimaf-Git/url-shortener/internal/http-server/reqcontext"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 )
@@ -22,7 +23,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const fn = "handlers.Save"
 
-		c := NewContext(w, r)
+		c := reqcontext.New(w, r)
 		log := h.log.With(
 			slog.String("fn", fn),
 			slog.String(RequestID, c.RequestID()),
