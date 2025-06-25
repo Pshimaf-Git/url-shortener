@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Pshimaf-Git/url-shortener/internal/cache"
+	"github.com/Pshimaf-Git/url-shortener/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
 )
@@ -35,18 +36,18 @@ func (h *Handler) NewDelete() http.HandlerFunc {
 
 		log.Info("decoded requst body")
 
-		affected, err := h.storage.DeleteURL(c.Context(), alias)
+		_, err := h.storage.DeleteURL(c.Context(), alias)
 		if err != nil {
+			if errors.Is(err, database.ErrURLNotFound) {
+				log.Info("url not found")
+
+				c.JSON(http.StatusBadRequest, resp.Error(ErrURLNotFound))
+				return
+			}
+
 			log.Error("url deleter", sl.Error(err))
 
 			c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
-			return
-		}
-
-		if affected == 0 {
-			log.Info("url not found")
-
-			c.JSON(http.StatusBadRequest, resp.Error(ErrURLNotFound))
 			return
 		}
 
