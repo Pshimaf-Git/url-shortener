@@ -198,7 +198,12 @@ func (s *storage) DeleteURL(ctx context.Context, alias string) (int64, error) {
 		return 0, wp.Wrap(err)
 	}
 
-	return res.RowsAffected(), nil
+	n := res.RowsAffected()
+	if n == 0 {
+		return 0, wp.Wrap(database.ErrURLNotFound)
+	}
+
+	return n, nil
 }
 
 func (s *storage) Close() error {
