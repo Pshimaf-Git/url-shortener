@@ -117,12 +117,8 @@ func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, leng
 
 	wp := wraper.New(fn)
 
-	if originalURL == "" {
-		return "", wp.Wrap(errors.New("url must not be empty"))
-	}
-
-	if length <= 0 {
-		return "", wp.Wrap(errors.New("invlid alias length"))
+	if err := validateSaveGeneratedURl(originalURL, length, maxAttempts); err != nil {
+		return "", wp.Wrap(err)
 	}
 
 	for i := 0; i < maxAttempts; i++ {
@@ -147,6 +143,27 @@ func (s *storage) SaveGeneratedURl(ctx context.Context, originalURL string, leng
 	}
 
 	return "", wp.Wrap(database.ErrMaxRetriesForGenerate)
+}
+
+func validateSaveGeneratedURl(originalURL string, length, maxAttempts int) error {
+	errs := make([]error, 0, 3)
+	if originalURL == "" {
+		errs = append(errs, errors.New("url must not be empty"))
+	}
+
+	if length <= 0 {
+		errs = append(errs, errors.New("invlid alias length"))
+	}
+
+	if maxAttempts <= 0 {
+		errs = append(errs, errors.New("invalid max attemts"))
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
+	return errors.Join(errs...)
 }
 
 func (s *storage) GetURl(ctx context.Context, alias string) (string, error) {
