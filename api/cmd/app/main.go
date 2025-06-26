@@ -10,13 +10,13 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/cache/redis"
-	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/Pshimaf-Git/url-shortener/internal/database/postgres"
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/handlers"
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/middleware/logger"
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/server"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/cache/redis"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/database/postgres"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/handlers"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/middleware/logger"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/server"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 	"github.com/go-chi/chi/v5/middleware"
 )
 

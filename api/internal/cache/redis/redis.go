@@ -6,9 +6,9 @@ import (
 	"net"
 	"strings"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/cache"
-	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 	"github.com/redis/go-redis/v9"
 )
 

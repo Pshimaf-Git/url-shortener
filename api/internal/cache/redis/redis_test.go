@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/cache"
-	"github.com/Pshimaf-Git/url-shortener/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

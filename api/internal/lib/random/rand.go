@@ -7,7 +7,7 @@ import (
 	"math/big"
 	v2 "math/rand/v2"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 )
 
 var InvalidMax = errors.New("negative or zero max")

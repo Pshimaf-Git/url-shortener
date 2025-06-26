@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/cache"
-	"github.com/Pshimaf-Git/url-shortener/internal/database"
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/reqcontext"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/sl"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/reqcontext"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/sl"
 )
 
 func (h *Handler) NewDelete() http.HandlerFunc {

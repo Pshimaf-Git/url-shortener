@@ -3,7 +3,7 @@ package postgres
 import (
 	"time"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

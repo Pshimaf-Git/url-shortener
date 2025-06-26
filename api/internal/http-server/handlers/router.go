@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/reqcontext"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/api/resp"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/reqcontext"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
 	"github.com/go-chi/chi/v5"
 )
 

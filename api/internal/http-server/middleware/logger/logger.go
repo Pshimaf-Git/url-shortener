@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/http-server/handlers"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/handlers"
 	"github.com/go-chi/chi/v5/middleware"
 )
 

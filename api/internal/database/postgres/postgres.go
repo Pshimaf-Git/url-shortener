@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/random"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/Pshimaf-Git/url-shortener/internal/config"
-	"github.com/Pshimaf-Git/url-shortener/internal/database"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/random"
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
 )
 
 var _ database.Database = &storage{}
