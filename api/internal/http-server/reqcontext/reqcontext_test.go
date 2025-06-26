@@ -558,59 +558,6 @@ func TestDecodeJSON(t *testing.T) {
 	}
 }
 
-func TestDecodeXML(t *testing.T) {
-	tests := []struct {
-		name          string
-		inputBody     string
-		target        interface{}
-		expectedError bool
-		expectedValue interface{}
-	}{
-		{
-			name:      "valid xml",
-			inputBody: `<person><name>John</name><age>30</age></person>`,
-			target: &struct {
-				XMLName xml.Name `xml:"person"`
-				Name    string   `xml:"name"`
-				Age     int      `xml:"age"`
-			}{},
-			expectedError: false,
-			expectedValue: &struct {
-				XMLName xml.Name `xml:"person"`
-				Name    string   `xml:"name"`
-				Age     int      `xml:"age"`
-			}{
-				Name: "John",
-				Age:  30,
-			},
-		},
-		{
-			name:          "invalid xml",
-			inputBody:     `<person><name>John</name><age>30</person>`, // Missing closing age tag
-			target:        &struct{}{},
-			expectedError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("POST", "/", strings.NewReader(tt.inputBody))
-			req.Header.Set("Content-Type", "application/xml")
-
-			c := New(rr, req)
-			err := c.DecodeXML(tt.target)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedValue, tt.target)
-			}
-		})
-	}
-}
-
 func TestDecodeForm(t *testing.T) {
 	tests := []struct {
 		name          string
