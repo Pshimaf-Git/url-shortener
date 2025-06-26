@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Pshimaf-Git/url-shortener/internal/lib/wraper"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
