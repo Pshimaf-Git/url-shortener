@@ -3,3 +3,8 @@
 
 # IDE
 .vscode/
+
+# task files
+Taskfile.yml
+Taskfile.yaml
+.task/*
