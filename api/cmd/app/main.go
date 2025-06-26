@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache/redis"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
@@ -40,7 +41,7 @@ func main() {
 		}
 	}()
 
-	signal.Notify(done, os.Interrupt, os.Kill)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	<-done
 
