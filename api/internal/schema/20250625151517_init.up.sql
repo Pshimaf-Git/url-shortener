@@ -7,4 +7,3 @@ CREATE TABLE IF NOT EXISTS urls (
 );
 
 CREATE INDEX IF NOT EXISTS idx_urls_alias ON urls(alias);
-CREATE INDEX IF NOT EXISTS idx_urls_user_id ON urls(user_id);
