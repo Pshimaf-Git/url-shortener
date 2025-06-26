@@ -3,6 +3,7 @@ module github.com/Pshimaf-Git/url-shortener
 go 1.24.4
 
 require (
+	github.com/agiledragon/gomonkey/v2 v2.13.0
 	github.com/ajg/form v1.5.1
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/go-chi/chi/v5 v5.2.1
