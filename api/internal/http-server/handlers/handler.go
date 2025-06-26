@@ -39,12 +39,21 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 
 	url, err := h.cache.Get(ctx, alias)
 	if err == nil {
-		h.cache.Expire(ctx, alias)
+		if err := h.cache.Expire(ctx, alias); err != nil {
+			h.log.Error("expire alias",
+				slog.String("key", alias),
+				slog.String("value", url),
+				sl.Error(err),
+			)
+		}
 		return url, nil
 	}
 
 	if !errors.Is(err, cache.ErrKeyNotExist) {
-		return "", wp.Wrap(err)
+		h.log.Error("get URL from cache",
+			slog.String("key", alias),
+			sl.Error(err),
+		)
 	}
 
 	url, err = h.storage.GetURl(ctx, alias)
@@ -63,11 +72,6 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 		defer cancel()
 
 		if err := h.cache.Set(setCtx, alias, url); err != nil {
-			if errors.Is(err, cache.ErrKeyNotExist) {
-				h.log.Info("alias not found in cache", slog.String("alias", alias))
-				return
-			}
-
 			h.log.Error("cache URL",
 				slog.String("key", alias),
 				slog.String("value", url),
