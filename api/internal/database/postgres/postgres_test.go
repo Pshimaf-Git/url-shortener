@@ -2,11 +2,14 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/random"
+	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,6 +58,31 @@ func setupTestDB(t *testing.T) (*storage, func()) {
 }
 
 func TestNew(t *testing.T) {
+	t.Run("context_deadline_exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+
+		time.Sleep(time.Nanosecond * 10)
+
+		db, err := New(ctx, POSTGRES_CFG)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Nil(t, db)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		cancel()
+		db, err := New(ctx, POSTGRES_CFG)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Nil(t, db)
+	})
+
 	tests := []struct {
 		name        string
 		cfg         *config.PostreSQLConfig
@@ -104,6 +132,39 @@ func TestNew(t *testing.T) {
 }
 
 func TestSaveURL(t *testing.T) {
+	t.Run("context_deadline_exceeded", func(t *testing.T) {
+		db, cleanup := setupTestDB(t)
+		defer cleanup()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+
+		time.Sleep(time.Nanosecond * 10)
+
+		testURL := "https://example.com"
+		testAlias := "example"
+
+		err := db.SaveURL(ctx, testURL, testAlias)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		db, cleanup := setupTestDB(t)
+		defer cleanup()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		testURL := "https://example.com"
+		testAlias := "example"
+
+		cancel()
+		err := db.SaveURL(ctx, testURL, testAlias)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -182,6 +243,46 @@ func TestSaveURL(t *testing.T) {
 func TestGetURL(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	t.Run("context_deadline_exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+
+		time.Sleep(time.Nanosecond * 10)
+
+		testURL := "https://example.context_deadline_exceeded.com"
+		testAlias := "__context_deadline_exceeded__"
+
+		err := db.SaveURL(context.Background(), testURL, testAlias)
+		require.NoError(t, err)
+
+		url, err := db.GetURl(ctx, testAlias)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+
+		// because context canceled
+		assert.Equal(t, "", url)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		testURL := "https://example.context_canceled.ru"
+		testAlias := "__context_canceled__"
+
+		err := db.SaveURL(ctx, testURL, testAlias)
+		require.NoError(t, err)
+
+		cancel()
+		url, err := db.GetURl(ctx, testAlias)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+
+		// because context canceled
+		assert.Equal(t, "", url)
+	})
 
 	// Setup test data
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -243,6 +344,41 @@ func TestGetURL(t *testing.T) {
 func TestDeleteURL(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+
+	t.Run("context_deadline_exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+
+		time.Sleep(time.Nanosecond * 10)
+
+		testURL := "https://example.context_deadline_exceeded.com"
+		testAlias := "context_deadline_exceeded"
+		err := db.SaveURL(context.Background(), testURL, testAlias)
+		require.NoError(t, err)
+
+		n, err := db.DeleteURL(ctx, testAlias)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, int64(0), n)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		testURL := "https://example.context_canceled.com"
+		testAlias := "canceled"
+		err := db.SaveURL(context.Background(), testURL, testAlias)
+		require.NoError(t, err)
+
+		cancel()
+		n, err := db.DeleteURL(ctx, testAlias)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Equal(t, int64(0), n)
+	})
 
 	// Setup test data
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -312,6 +448,52 @@ func TestDeleteURL(t *testing.T) {
 func TestSaveGeneratedURL(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+
+	t.Run("context_deadline_exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancel()
+
+		time.Sleep(time.Nanosecond * 10)
+
+		testURL := "https://context_deadline_exceeded.com"
+
+		alias, err := db.SaveGeneratedURl(ctx, testURL, 10, 10)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, "", alias)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		testURL := "https://context_deadline_exceeded.com"
+
+		cancel()
+		alias, err := db.SaveGeneratedURl(ctx, testURL, 10, 10)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Equal(t, "", alias)
+	})
+
+	t.Run("max_retries_for_generate", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+		defer cancel()
+
+		conflictAlias := "abc123"
+		err := db.SaveURL(ctx, "https://occupied.com", conflictAlias)
+		require.NoError(t, err)
+
+		patches := gomonkey.ApplyFunc(random.StringRandV2, func(int) string {
+			return conflictAlias
+		})
+		defer patches.Reset()
+
+		_, err = db.SaveGeneratedURl(ctx, "https://new-url.com", len(conflictAlias), 2)
+
+		assert.ErrorIs(t, err, database.ErrMaxRetriesForGenerate)
+	})
 
 	tests := []struct {
 		name        string
@@ -422,6 +604,111 @@ func TestClose(t *testing.T) {
 				_, err = db.pool.Exec(context.Background(), "SELECT 1")
 				assert.Error(t, err)
 			}
+		})
+	}
+}
+
+func TestBuildConnString(t *testing.T) {
+	t.Run("base_case", func(t *testing.T) {
+		localCfg := &config.PostreSQLConfig{
+			Host:     "89.9.8.7",
+			Port:     "9876",
+			Name:     "mydb",
+			User:     "root",
+			SSLMode:  "enable",
+			Password: "1234",
+		}
+
+		expectedString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+			localCfg.User, localCfg.Password, localCfg.Host, localCfg.Port, localCfg.Name, localCfg.SSLMode,
+		)
+
+		wantCotains := []string{
+			localCfg.Host,
+			localCfg.Name,
+			localCfg.User,
+			localCfg.Port,
+			localCfg.SSLMode,
+			localCfg.Password,
+		}
+
+		connStr := BuildConnString(localCfg)
+		for _, s := range wantCotains {
+			assert.Contains(t, connStr, s)
+		}
+
+		assert.Equal(t, expectedString, connStr)
+	})
+}
+
+func Test_validateSaveGeneratedURL(t *testing.T) {
+	type input struct {
+		url         string
+		length      int
+		maxAttempts int
+	}
+	testCases := []struct {
+		name    string
+		input   input
+		wantErr bool
+	}{
+		{
+			name: "good input",
+			input: input{
+				url:         "http://good.com",
+				length:      10,
+				maxAttempts: 5,
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "bad max attempts",
+			input: input{
+				url:         "http://good.com",
+				length:      10,
+				maxAttempts: -10,
+			},
+			wantErr: true,
+		},
+
+		{
+			name: "bad length",
+			input: input{
+				url:         "http://good.com",
+				length:      0,
+				maxAttempts: 1000,
+			},
+			wantErr: true,
+		},
+
+		{
+			name: "empty URL",
+			input: input{
+				url:         "",
+				length:      1,
+				maxAttempts: 1,
+			},
+			wantErr: true,
+		},
+
+		{
+			name:    "bad all inputs",
+			input:   input{}, // zero value: "", 0, 0
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSaveGeneratedURl(tt.input.url, tt.input.length, tt.input.maxAttempts)
+
+			if !tt.wantErr {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+
 		})
 	}
 }
