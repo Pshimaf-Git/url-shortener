@@ -71,12 +71,10 @@ func TestSet(t *testing.T) {
 		err := client.Set(ctx, "test-key", "test-value")
 		assert.NoError(t, err)
 
-		// Verify value in miniredis
 		val, err := mr.Get("test-key")
 		assert.NoError(t, err)
 		assert.Equal(t, "test-value", val)
 
-		// Verify TTL was set
 		ttl := mr.TTL("test-key")
 		assert.Greater(t, ttl, time.Duration(0))
 	})
@@ -84,6 +82,16 @@ func TestSet(t *testing.T) {
 	t.Run("empty key", func(t *testing.T) {
 		err := client.Set(ctx, "", "value")
 		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := client.Set(ctx, "cancelled-key", "value")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.False(t, mr.Exists("cancelled-key"))
 	})
 }
 
@@ -111,6 +119,17 @@ func TestGet(t *testing.T) {
 	t.Run("empty key", func(t *testing.T) {
 		_, err := client.Get(ctx, "")
 		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		mr.Set("ctx-key", "value")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := client.Get(ctx, "ctx-key")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
 	})
 }
 
@@ -142,6 +161,17 @@ func TestExpire(t *testing.T) {
 		err := client.Expire(ctx, "")
 		assert.ErrorIs(t, err, cache.ErrEmptyKey)
 	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		mr.Set("ctx-key", "value")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := client.Expire(ctx, "ctx-key")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
 }
 
 func TestDelete(t *testing.T) {
@@ -152,33 +182,59 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful delete", func(t *testing.T) {
-		mr.Set("to-delete", "value")
-		assert.True(t, mr.Exists("to-delete"))
+		k := "to-delete"
+		err := mr.Set(k, "value")
+		require.NoError(t, err)
+		assert.True(t, mr.Exists(k))
 
-		err := client.Delete(ctx, "to-delete")
+		err = client.Delete(ctx, k)
 		assert.NoError(t, err)
-		assert.False(t, mr.Exists("to-delete"))
+		assert.False(t, mr.Exists(k))
 	})
 
 	t.Run("key not found", func(t *testing.T) {
 		err := client.Delete(ctx, "non-existent-key")
+		assert.Error(t, err)
 		assert.ErrorIs(t, err, cache.ErrKeyNotExist)
 	})
 
 	t.Run("empty key", func(t *testing.T) {
 		err := client.Delete(ctx, "")
+		assert.Error(t, err)
 		assert.ErrorIs(t, err, cache.ErrEmptyKey)
+	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		k := "ctx-delete"
+		err := mr.Set(k, "value")
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err = client.Delete(ctx, k)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
 	})
 }
 
 func TestClose(t *testing.T) {
-	client, mr := setupTestRedis(t)
-	defer mr.Close()
+	t.Run("good_rdb", func(t *testing.T) {
+		client, mr := setupTestRedis(t)
+		defer mr.Close()
 
-	err := client.Close()
-	assert.NoError(t, err)
+		err := client.Close()
+		assert.NoError(t, err)
 
-	// Verify connection is closed by trying to perform an operation
-	err = client.Set(context.Background(), "test", "value")
-	assert.Error(t, err)
+		// Verify connection is closed by trying to perform an operation
+		err = client.Set(context.Background(), "test", "value")
+		assert.Error(t, err)
+	})
+
+	t.Run("nil_rdb", func(t *testing.T) {
+		client := redisClient{rdb: nil}
+
+		err := client.Close()
+		assert.NoError(t, err)
+	})
 }
