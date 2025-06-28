@@ -102,7 +102,9 @@ func TestInitRoutes(t *testing.T) {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					t1 := time.Now()
 					discardLogger.Info("start", slog.Time("now", t1))
-					defer discardLogger.Info("end", slog.Duration("now", time.Since(t1)))
+					defer func() {
+						discardLogger.Info("end", slog.Duration("now", time.Since(t1)))
+					}()
 
 					next.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodDelete, "/", nil))
 				})
