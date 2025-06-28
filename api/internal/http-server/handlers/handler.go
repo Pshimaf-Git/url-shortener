@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
@@ -83,9 +84,38 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 	return url, nil
 }
 
-func ValidateURLFormat(urlToCheck string) error {
-	_, err := url.ParseRequestURI(urlToCheck)
-	return err
+func isValidURL(urlToCheck string) bool {
+	const (
+		HTTP  = "http"
+		HTTPs = "https"
+	)
+
+	if urlToCheck == "" {
+		return false
+	}
+
+	if strings.ContainsAny(urlToCheck, " \t\n\r\b\a") {
+		return false
+	}
+
+	u, err := url.ParseRequestURI(urlToCheck)
+	if err != nil {
+		return false
+	}
+
+	if u.Scheme == "" || u.Host == "" {
+		return false
+	}
+
+	if u.Scheme != HTTP && u.Scheme != HTTPs {
+		return false
+	}
+
+	if strings.Contains(u.Host, "..") || strings.Contains(u.Host, " ") {
+		return false
+	}
+
+	return true
 }
 
 type Request struct {
