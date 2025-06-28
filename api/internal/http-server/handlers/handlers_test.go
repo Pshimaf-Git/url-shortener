@@ -6,17 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache/cachemock"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database/mocks"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/logger/discard"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -30,17 +34,146 @@ const (
 	hasDel
 )
 
-var discardLogger = discard.NewDiscardLogger()
-
 var (
 	ErrInternal = errors.New("internal error")
 )
 
 var (
-	discardCfg = &config.ServerConfig{}
+	discardLogger = discard.NewDiscardLogger()
+	discardCfg    = &config.ServerConfig{}
 )
 
-func TestNewHandler(t *testing.T) {
+func Test_isValidURL(t *testing.T) {
+	testCases := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{
+			name: "base case",
+			url:  "http://www.example.com",
+			want: true,
+		},
+
+		{
+			name: "empty url",
+			url:  "",
+			want: false,
+		},
+
+		{
+			name: "invalid url format",
+			url:  "invalid://http",
+			want: false,
+		},
+
+		{
+			name: "unkown schema",
+			url:  "unkown://www.example.com",
+			want: false,
+		},
+
+		{
+			name: "invalid control character",
+			url:  "%%%s&@&$$$~~~````/\\\\(^__6__^)###№№№№№!!\"\"'\r'\b\a",
+			want: false,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isValidURL(tt.url))
+		})
+	}
+}
+
+func TestInitRoutes(t *testing.T) {
+	t.Run("base_case", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		mockDB := mocks.NewMockDatabase(ctrl)
+		mockCache := cachemock.NewMockCache(ctrl)
+
+		h := New(mockDB, mockCache, discardCfg, discardLogger)
+		require.NotNil(t, h)
+
+		mws := []func(http.Handler) http.Handler{
+			func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					t1 := time.Now()
+					discardLogger.Info("start", slog.Time("now", t1))
+					defer discardLogger.Info("end", slog.Duration("now", time.Since(t1)))
+
+					next.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodDelete, "/", nil))
+				})
+			},
+		}
+
+		router := h.InitRoutes(mws...)
+		assert.NotNil(t, router)
+
+		inUse := router.Middlewares()
+		assert.Equal(t, len(mws), len(inUse))
+
+		ctrl.Finish()
+	})
+}
+
+func Test_badConfigurate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testCases := []struct {
+		name   string
+		db     database.Database
+		cache  cache.Cache
+		logger *slog.Logger
+		cfg    *config.ServerConfig
+		want   bool
+	}{
+		{
+			name:   "happy path",
+			db:     mocks.NewMockDatabase(ctrl),
+			cache:  cachemock.NewMockCache(ctrl),
+			logger: discardLogger,
+			cfg:    discardCfg,
+			want:   false,
+		},
+		{
+			name:   "witout logger",
+			db:     mocks.NewMockDatabase(ctrl),
+			cache:  cachemock.NewMockCache(ctrl),
+			logger: nil,
+			cfg:    discardCfg,
+			want:   true,
+		},
+		{
+			name:   "witout db and cache",
+			db:     nil,
+			cache:  nil,
+			logger: discardLogger,
+			cfg:    discardCfg,
+			want:   true,
+		},
+		{
+			name:   "witout all",
+			db:     nil,
+			cache:  nil,
+			logger: nil,
+			cfg:    nil,
+			want:   true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			h := New(tt.db, tt.cache, tt.cfg, tt.logger)
+			assert.Equal(t, tt.want, h.badConfigurate())
+		})
+	}
+}
+
+func TestNew(t *testing.T) {
 	t.Run("new handler", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
@@ -625,6 +758,54 @@ func TestRedirect(t *testing.T) {
 			assert.Equal(t, tt.wantRedirect, wasRedirect(w))
 		})
 	}
+}
+
+func Test_helthy(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+
+		ctrl := gomock.NewController(t)
+
+		dbMock := mocks.NewMockDatabase(ctrl)
+		cacheMock := cachemock.NewMockCache(ctrl)
+
+		h := New(dbMock, cacheMock, discardCfg, discardLogger)
+
+		h.helthy(w, r)
+
+		body, err := io.ReadAll(w.Result().Body)
+		require.NoError(t, err)
+
+		var responce resp.Response
+		err = json.Unmarshal(body, &responce)
+
+		require.NoError(t, err)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, resp.OK(), responce)
+
+		ctrl.Finish()
+	})
+
+	t.Run("bad_configurate", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+
+		h := New(nil, nil, discardCfg, discardLogger)
+
+		h.helthy(w, r)
+
+		body, err := io.ReadAll(w.Result().Body)
+		require.NoError(t, err, "read responce body")
+
+		var responce resp.Response
+		err = json.Unmarshal(body, &responce)
+		require.NoError(t, err, "json unmarshaling")
+
+		assert.Equal(t, resp.Error(ErrInternalServer), responce)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func wasRedirect(w *httptest.ResponseRecorder) bool {
