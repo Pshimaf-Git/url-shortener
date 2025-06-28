@@ -10,7 +10,7 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 )
 
-var InvalidMax = errors.New("negative or zero max")
+var ErrInvalidMax = errors.New("negative or zero max")
 
 // all symbols from english alphabet with numbers
 var chars = []rune("DdNOegJKLMfPQabvRSTEFwc56hijZqrsUnV789WXYAC2tklGHImoBp10uxyz34")
@@ -35,12 +35,12 @@ func StringRandV2(length int) string {
 // generate random index for char)
 func StringCrypto(length int) (string, error) {
 	if length <= 0 {
-		return "", nil
+		return "", ErrInvalidMax
 	}
 
 	result := make([]rune, length)
 	for i := range result {
-		n, err := Int64Crypto(int64(length))
+		n, err := Int64Crypto(int64(len(chars)))
 		if err != nil {
 			return "", wraper.Wrapf("StringCrypto", err, "length: %d", length)
 		}
@@ -64,7 +64,7 @@ func MustStringCrypto(length int) string {
 // Int64Crypto return cryptographically strong random number (using crypto/rand).
 func Int64Crypto(max int64) (int64, error) {
 	if max <= 0 {
-		return 0, wraper.Wrap("Int64Crypto", InvalidMax)
+		return 0, wraper.Wrap("Int64Crypto", ErrInvalidMax)
 	}
 
 	nBig, err := rand.Int(rand.Reader, big.NewInt(max))
