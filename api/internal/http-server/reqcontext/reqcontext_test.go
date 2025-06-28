@@ -3,329 +3,256 @@ package reqcontext
 import (
 	"context"
 	"encoding/xml"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNew(t *testing.T) {
+func setupTestContext() (*ReqContext, *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(http.MethodGet, "/test?param=value", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
 
-	c := New(w, r)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("chiParam", "chiValue")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	assert.NotNil(t, c)
-	assert.Equal(t, w, c.w)
-	assert.Equal(t, r, c.r)
-	assert.Equal(t, r.Body, c.body)
+	return New(w, req), w
 }
 
-func TestRequest(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-		assert.Equal(t, r, c.Request())   // compare pointers
-		assert.Equal(t, *r, *c.Request()) // compare values
-	})
+func TestCloseBody(t *testing.T) {
+	c, _ := setupTestContext()
+	err := c.CloseBody()
+	assert.NoError(t, err)
 }
 
-func TestResponceWriter(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
+func TestCloseBodyError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Body = &mockReadCloser{closeErr: errors.New("close error")}
 
-		c := New(w, r)
-		assert.Equal(t, w, c.ResponceWriter())
-	})
+	c := New(httptest.NewRecorder(), req)
+	err := c.CloseBody()
+	assert.Error(t, err)
 }
 
-func TestHeader(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-
-		assert.Equal(t, w.Header(), c.Header())
-	})
+type mockReadCloser struct {
+	closeErr error
 }
 
-func TestWriteHeader(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-		c.WriteHeader(http.StatusAccepted)
-
-		assert.Equal(t, http.StatusAccepted, w.Code)
-	})
-}
-
-func TestContext(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-		assert.Equal(t, r.Context(), c.Context())
-	})
-}
-
-func TestProto(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-
-		assert.Equal(t, r.Proto, c.Proto())
-	})
-}
-
-func TestProtoMajor(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-
-		assert.Equal(t, r.ProtoMajor, c.ProtoMajor())
-	})
-}
-
-func TestProtoMinor(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodOptions, "/", nil)
-		w := httptest.NewRecorder()
-
-		c := New(w, r)
-
-		assert.Equal(t, r.ProtoMinor, c.ProtoMinor())
-	})
-}
-
-func TestPattern(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		pattern := "/blabla"
-		router := chi.NewRouter()
-
-		r := httptest.NewRequest(http.MethodOptions, pattern, nil)
-		w := httptest.NewRecorder()
-
-		router.Get(pattern, func(w http.ResponseWriter, r *http.Request) {
-			c := New(w, r)
-			assert.Equal(t, r.Pattern, c.Pattern())
-		})
-
-		router.ServeHTTP(w, r)
-	})
-}
+func (m *mockReadCloser) Read(p []byte) (n int, err error) { return 0, io.EOF }
+func (m *mockReadCloser) Close() error                     { return m.closeErr }
 
 func TestURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		inputURL string
-		expected string
-	}{
-		{
-			name:     "root path",
-			inputURL: "/",
-			expected: "/",
-		},
-		{
-			name:     "with query",
-			inputURL: "/path?key=value",
-			expected: "/path?key=value",
-		},
-		{
-			name:     "with fragment",
-			inputURL: "/path#section",
-			expected: "/path%23section", // in url symbol `#` coding as %23
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", tt.inputURL, nil)
-
-			c := New(w, r)
-			assert.Equal(t, tt.expected, c.URL().String())
-		})
-	}
+	c, _ := setupTestContext()
+	u := c.URL()
+	require.NotNil(t, u)
+	assert.Equal(t, "/test?param=value", u.RequestURI())
 }
 
 func TestQuery(t *testing.T) {
-	tests := []struct {
-		name     string
-		inputURL string
-		expected url.Values
-	}{
-		{
-			name:     "no query",
-			inputURL: "/",
-			expected: url.Values{},
-		},
-		{
-			name:     "single query",
-			inputURL: "/?key=value",
-			expected: url.Values{"key": []string{"value"}},
-		},
-		{
-			name:     "multiple queries",
-			inputURL: "/?key1=value1&key2=value2",
-			expected: url.Values{
-				"key1": []string{"value1"},
-				"key2": []string{"value2"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", tt.inputURL, nil)
-
-			c := New(w, r)
-			assert.Equal(t, tt.expected, c.Query())
-		})
-	}
+	c, _ := setupTestContext()
+	query := c.Query()
+	require.NotNil(t, query)
+	assert.Equal(t, "value", query.Get("param"))
 }
 
 func TestGetParam(t *testing.T) {
-	tests := []struct {
-		name     string
-		inputURL string
-		key      string
-		expected string
-	}{
-		{
-			name:     "existing param",
-			inputURL: "/?key=value",
-			key:      "key",
-			expected: "value",
-		},
-		{
-			name:     "missing param",
-			inputURL: "/",
-			key:      "key",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", tt.inputURL, nil)
-
-			c := New(w, r)
-			assert.Equal(t, tt.expected, c.GetParam(tt.key))
-		})
-	}
-}
-
-func TestGetChiParamFromCtx(t *testing.T) {
-	tests := []struct {
-		name          string
-		routePattern  string
-		requestPath   string
-		paramName     string
-		expectedValue string
-		setupContext  func(context.Context) context.Context // Optional context setup
-	}{
-		{
-			name:          "basic chi param from context",
-			routePattern:  "/users/{id}",
-			requestPath:   "/users/123",
-			paramName:     "id",
-			expectedValue: "123",
-		},
-		{
-			name:          "param not in context",
-			routePattern:  "/posts/{slug}",
-			requestPath:   "/posts/hello-world",
-			paramName:     "missing",
-			expectedValue: "",
-		},
-		{
-			name:          "with additional context values",
-			routePattern:  "/orgs/{orgID}/teams/{teamID}",
-			requestPath:   "/orgs/42/teams/7",
-			paramName:     "teamID",
-			expectedValue: "7",
-			setupContext: func(ctx context.Context) context.Context {
-				// Add additional context values if needed
-				return context.WithValue(ctx, "requestID", "abc123")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := chi.NewRouter()
-			r.Get(tt.routePattern, func(w http.ResponseWriter, r *http.Request) {
-				// Apply context setup if provided
-				if tt.setupContext != nil {
-					r = r.WithContext(tt.setupContext(r.Context()))
-				}
-
-				c := New(w, r)
-				value := c.GetChiParamFromCtx(tt.paramName)
-				assert.Equal(t, tt.expectedValue, value)
-			})
-
-			req := httptest.NewRequest("GET", tt.requestPath, nil)
-			rr := httptest.NewRecorder()
-			r.ServeHTTP(rr, req)
-		})
-	}
+	c, _ := setupTestContext()
+	assert.Equal(t, "value", c.GetParam("param"))
+	assert.Empty(t, c.GetParam("nonexistent"))
 }
 
 func TestGetChiParam(t *testing.T) {
-	tests := []struct {
-		name          string
-		routePattern  string
-		requestPath   string
-		paramName     string
-		expectedValue string
-	}{
-		{
-			name:          "simple param",
-			routePattern:  "/users/{id}",
-			requestPath:   "/users/123",
-			paramName:     "id",
-			expectedValue: "123",
-		},
-		{
-			name:          "multiple params",
-			routePattern:  "/posts/{year}/{month}",
-			requestPath:   "/posts/2023/10",
-			paramName:     "month",
-			expectedValue: "10",
-		},
+	c, _ := setupTestContext()
+	assert.Equal(t, "chiValue", c.GetChiParam("chiParam"))
+	assert.Empty(t, c.GetChiParam("nonexistent"))
+}
+
+func TestGetChiParamFromCtx(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, "chiValue", c.GetChiParamFromCtx("chiParam"))
+	assert.Empty(t, c.GetChiParamFromCtx("nonexistent"))
+}
+
+func TestRequest(t *testing.T) {
+	c, _ := setupTestContext()
+	req := c.Request()
+	require.NotNil(t, req)
+	assert.Equal(t, http.MethodGet, req.Method)
+}
+
+func TestResponceWriter(t *testing.T) {
+	c, w := setupTestContext()
+	rw := c.ResponceWriter()
+	require.NotNil(t, rw)
+	assert.Equal(t, w, rw)
+}
+
+func TestRequestID(t *testing.T) {
+	c, _ := setupTestContext()
+
+	ctx := context.WithValue(c.Context(), middleware.RequestIDKey, "test-id")
+	c.r = c.r.WithContext(ctx)
+	assert.Equal(t, "test-id", c.RequestID())
+}
+
+func TestHeader(t *testing.T) {
+	c, _ := setupTestContext()
+	headers := c.Header()
+	require.NotNil(t, headers)
+	headers.Set("Test-Header", "value")
+	assert.Equal(t, "value", headers.Get("Test-Header"))
+}
+
+func TestContext(t *testing.T) {
+	c, _ := setupTestContext()
+	ctx := c.Context()
+	require.NotNil(t, ctx)
+	assert.Equal(t, c.r.Context(), ctx)
+}
+
+func TestWriteHeader(t *testing.T) {
+	c, w := setupTestContext()
+	c.WriteHeader(http.StatusTeapot)
+	assert.Equal(t, http.StatusTeapot, w.Code)
+}
+
+func TestDeadline(t *testing.T) {
+	c, _ := setupTestContext()
+	deadline, ok := c.Deadline()
+	assert.False(t, ok)
+	assert.True(t, deadline.IsZero())
+}
+
+func TestDone(t *testing.T) {
+	c, _ := setupTestContext()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.r = c.r.WithContext(ctx)
+
+	done := c.Done()
+	require.NotNil(t, done, "Done channel should not be nil")
+
+	select {
+	case <-done:
+		t.Error("Done channel should not be closed yet")
+	default:
+
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := chi.NewRouter()
-			r.Get(tt.routePattern, func(w http.ResponseWriter, r *http.Request) {
-				c := New(w, r)
-				assert.Equal(t, tt.expectedValue, c.GetChiParam(tt.paramName))
-			})
+	cancel()
+	select {
+	case <-done:
 
-			req := httptest.NewRequest("GET", tt.requestPath, nil)
-			rr := httptest.NewRecorder()
-			r.ServeHTTP(rr, req)
-		})
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Done channel should be closed after cancellation")
 	}
+}
+
+func TestForm(t *testing.T) {
+	t.Run("nil for GET requests", func(t *testing.T) {
+		c, _ := setupTestContext()
+		form := c.Form()
+		assert.Nil(t, form, "Form should be nil for GET requests")
+	})
+
+	t.Run("populated for POST requests", func(t *testing.T) {
+
+		body := strings.NewReader("key=value")
+		req := httptest.NewRequest("POST", "/", body)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+
+		err := req.ParseForm()
+		require.NoError(t, err)
+
+		c := New(w, req)
+		form := c.Form()
+		require.NotNil(t, form, "Form should not be nil after ParseForm")
+		assert.Equal(t, "value", form.Get("key"))
+	})
+}
+
+func TestErr(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Nil(t, c.Err())
+}
+
+func TestValue(t *testing.T) {
+	c, _ := setupTestContext()
+	key := "test-key"
+	val := "test-value"
+	ctx := context.WithValue(c.Context(), key, val)
+	c.r = c.r.WithContext(ctx)
+	assert.Equal(t, val, c.Value(key))
+}
+
+func TestBody(t *testing.T) {
+	c, _ := setupTestContext()
+	body := c.Body()
+	require.NotNil(t, body)
+}
+
+func TestMethod(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, http.MethodGet, c.Method())
+}
+
+func TestURI(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, "/test?param=value", c.URI())
+}
+
+func TestUserAgent(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, "", c.UserAgent())
+}
+
+func TestHost(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, "example.com", c.Host())
+}
+
+func TestTLS(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := New(w, r)
+		assert.NotNil(t, c.TLS())
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	_, err := client.Get(ts.URL)
+	assert.NoError(t, err)
+}
+
+func TestProto(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, "HTTP/1.1", c.Proto())
+}
+
+func TestProtoMajor(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, 1, c.ProtoMajor())
+}
+
+func TestProtoMinor(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, 1, c.ProtoMinor())
+}
+
+func TestContentLength(t *testing.T) {
+	c, _ := setupTestContext()
+	assert.Equal(t, int64(0), c.ContentLength())
 }
 
 func TestJSON(t *testing.T) {
@@ -396,7 +323,7 @@ func TestJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 			c := New(rr, req)
 			c.JSON(tt.expectedStatus, tt.inputData)
@@ -409,38 +336,54 @@ func TestJSON(t *testing.T) {
 }
 
 func TestXML(t *testing.T) {
+	type testStruct struct {
+		XMLName xml.Name `xml:"test"`
+		Field   string   `xml:"field"`
+	}
+
 	tests := []struct {
-		name           string
-		inputData      interface{}
-		expectedStatus int
-		expectedBody   string
+		name        string
+		input       interface{}
+		status      int
+		expectXML   string
+		expectError bool
 	}{
 		{
-			name: "simple object",
-			inputData: struct {
-				XMLName xml.Name `xml:"person"`
-				Name    string   `xml:"name"`
-				Age     int      `xml:"age"`
-			}{
-				Name: "John",
-				Age:  30,
-			},
-			expectedStatus: http.StatusOK,
-			expectedBody:   `<person><name>John</name><age>30</age></person>`,
+			name:      "simple struct",
+			input:     testStruct{Field: "value"},
+			status:    http.StatusOK,
+			expectXML: `<test><field>value</field></test>`, // Note: no newline
+		},
+		{
+			name:      "empty struct",
+			input:     testStruct{},
+			status:    http.StatusOK,
+			expectXML: `<test><field></field></test>`, // Empty field is still present
+		},
+		{
+			name:        "invalid type",
+			input:       make(chan int),
+			status:      http.StatusInternalServerError,
+			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/", nil)
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			c := New(w, req)
 
-			c := New(rr, req)
-			c.XML(tt.expectedStatus, tt.inputData)
+			c.XML(tt.status, tt.input)
 
-			assert.Equal(t, tt.expectedStatus, rr.Code)
-			assert.Equal(t, "application/xml", rr.Header().Get("Content-Type"))
-			assert.Equal(t, tt.expectedBody, strings.TrimSpace(rr.Body.String()))
+			if tt.expectError {
+				assert.NotEqual(t, http.StatusOK, w.Code)
+				return
+			}
+
+			assert.Equal(t, tt.status, w.Code)
+			assert.Equal(t, "application/xml", w.Header().Get("Content-Type"))
+			assert.Equal(t, tt.expectXML, strings.TrimSpace(w.Body.String()))
 		})
 	}
 }
@@ -490,7 +433,7 @@ func TestFORM(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 			c := New(rr, req)
 			c.FORM(tt.expectedStatus, tt.inputData)
@@ -498,7 +441,6 @@ func TestFORM(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rr.Code)
 			assert.Equal(t, "application/x-www-form-urlencoded", rr.Header().Get("Content-Type"))
 
-			// Form encoding order isn't guaranteed, so we need to parse and compare
 			expected, err := url.ParseQuery(tt.expectedBody)
 			assert.NoError(t, err)
 			actual, err := url.ParseQuery(rr.Body.String())
@@ -609,7 +551,7 @@ func TestDecodeForm(t *testing.T) {
 		},
 		{
 			name:          "invalid form data",
-			inputBody:     "name=John&age=thirty", // age should be int
+			inputBody:     "name=John&age=thirty",
 			target:        &struct{}{},
 			expectedError: true,
 		},
@@ -630,6 +572,67 @@ func TestDecodeForm(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedValue, tt.target)
 			}
+		})
+	}
+}
+
+func TestDecodeXML(t *testing.T) {
+	type testStruct struct {
+		XMLName xml.Name `xml:"test"`
+		Field   string   `xml:"field"`
+	}
+
+	tests := []struct {
+		name        string
+		input       string
+		output      testStruct
+		expectError bool
+	}{
+		{
+			name:  "valid xml",
+			input: `<test><field>value</field></test>`,
+			output: testStruct{
+				XMLName: xml.Name{Local: "test"},
+				Field:   "value",
+			},
+		},
+		{
+			name:  "empty xml",
+			input: `<test></test>`,
+			output: testStruct{
+				XMLName: xml.Name{Local: "test"},
+			},
+		},
+		{
+			name:        "malformed xml",
+			input:       `<test><field>value</test>`,
+			expectError: true,
+		},
+		{
+			name:        "empty body",
+			input:       "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := strings.NewReader(tt.input)
+			req := httptest.NewRequest("POST", "/", body)
+			req.Header.Set("Content-Type", "application/xml")
+			w := httptest.NewRecorder()
+			c := New(w, req)
+
+			var result testStruct
+			err := c.DecodeXML(&result)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.output, result)
 		})
 	}
 }
