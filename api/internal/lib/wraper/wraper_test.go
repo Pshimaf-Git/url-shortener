@@ -2,6 +2,7 @@ package wraper
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -175,85 +176,6 @@ func TestWraper_Wrapf(t *testing.T) {
 	}
 }
 
-func TestWraper_WrapN(t *testing.T) {
-	tests := []struct {
-		name     string
-		funcName string
-		errs     []error
-		want     string
-		wantNil  bool
-	}{
-		{
-			name:     "no errors",
-			funcName: "TestFunc",
-			errs:     []error{},
-			wantNil:  true,
-		},
-		{
-			name:     "all nil errors",
-			funcName: "TestFunc",
-			errs:     []error{nil, nil, nil},
-			wantNil:  true,
-		},
-		{
-			name:     "single error",
-			funcName: "TestFunc",
-			errs:     []error{errors.New("first error")},
-			want:     "TestFunc: first error",
-		},
-		{
-			name:     "multiple errors",
-			funcName: "ProcessData",
-			errs: []error{
-				errors.New("db connection failed"),
-				errors.New("query failed"),
-				errors.New("marshal failed"),
-			},
-			want: "ProcessData: db connection failed: query failed: marshal failed",
-		},
-		{
-			name:     "mixed nil and non-nil errors",
-			funcName: "ValidateInput",
-			errs: []error{
-				nil,
-				errors.New("invalid email"),
-				nil,
-				errors.New("missing name"),
-				nil,
-			},
-			want: "ValidateInput: invalid email: missing name",
-		},
-		{
-			name:     "wrapped errors",
-			funcName: "ComplexOperation",
-			errs: []error{
-				errors.New("initial error"),
-				Wrap("SubOperation", errors.New("sub error")),
-				errors.New("final error"),
-			},
-			want: "ComplexOperation: initial error: SubOperation: sub error: final error",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wp := New(tt.funcName)
-			got := wp.WrapN(tt.errs...)
-
-			if tt.wantNil {
-				assert.Nil(t, got, "should return nil")
-				return
-			}
-
-			if !assert.NotNil(t, got, "should return error") {
-				return
-			}
-
-			assert.Equal(t, tt.want, got.Error(), "error message mismatch")
-		})
-	}
-}
-
 func TestWrap(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -407,80 +329,167 @@ func TestWrapf(t *testing.T) {
 	}
 }
 
-func TestWraperWrapN(t *testing.T) {
-	tests := []struct {
-		name     string
-		funcName string
-		errs     []error
-		want     string
-		wantNil  bool
-	}{
-		{
-			name:     "no errors",
-			funcName: "TestFunc",
-			errs:     []error{},
-			wantNil:  true,
-		},
-		{
-			name:     "all nil errors",
-			funcName: "TestFunc",
-			errs:     []error{nil, nil, nil},
-			wantNil:  true,
-		},
-		{
-			name:     "single error",
-			funcName: "TestFunc",
-			errs:     []error{errors.New("first error")},
-			want:     "TestFunc: first error",
-		},
-		{
-			name:     "multiple errors",
-			funcName: "ProcessData",
-			errs: []error{
-				errors.New("db connection failed"),
-				errors.New("query failed"),
-				errors.New("marshal failed"),
-			},
-			want: "ProcessData: db connection failed: query failed: marshal failed",
-		},
-		{
-			name:     "mixed nil and non-nil errors",
-			funcName: "ValidateInput",
-			errs: []error{
-				nil,
-				errors.New("invalid email"),
-				nil,
-				errors.New("missing name"),
-				nil,
-			},
-			want: "ValidateInput: invalid email: missing name",
-		},
-		{
-			name:     "wrapped errors",
-			funcName: "ComplexOperation",
-			errs: []error{
-				errors.New("initial error"),
-				Wrap("SubOperation", errors.New("sub error")),
-				errors.New("final error"),
-			},
-			want: "ComplexOperation: initial error: SubOperation: sub error: final error",
-		},
-	}
+func Test_newError(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		const fn = "TestFunc"
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := WrapN(tt.funcName, tt.errs...)
+		var msg = "msg"
+		var originalError error = errors.New("org")
 
-			if tt.wantNil {
-				assert.Nil(t, got, "should return nil")
-				return
-			}
+		newErr := newError(fn, msg, originalError)
 
-			if !assert.NotNil(t, got, "should return error") {
-				return
-			}
+		require.Error(t, newErr)
 
-			assert.Equal(t, tt.want, got.Error(), "error message mismatch")
-		})
-	}
+		e, ok := newErr.(Error)
+		assert.True(t, ok)
+
+		assert.Equal(t, fn, e.Fn)
+		assert.Equal(t, msg, e.Msg)
+		assert.ErrorIs(t, e.Err, originalError)
+
+		assert.ErrorIs(t, e, originalError)
+	})
+
+	t.Run("without_msg", func(t *testing.T) {
+		const fn = "TestFunc"
+
+		var originalError error = errors.New("org")
+
+		newErr := newError(fn, emptyMsg, originalError)
+
+		require.Error(t, newErr)
+
+		e, ok := newErr.(Error)
+		assert.True(t, ok)
+
+		assert.Equal(t, fn, e.Fn)
+		assert.Equal(t, emptyMsg, e.Msg)
+		assert.ErrorIs(t, e.Err, originalError)
+
+		assert.ErrorIs(t, e, originalError)
+	})
+
+	t.Run("nil_error", func(t *testing.T) {
+		err := newError("fn", "msg", nil)
+		assert.NoError(t, err)
+	})
+}
+
+func TestError(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		const fn = "TestFunc"
+
+		var msg = "msg"
+		var originalError error = errors.New("org")
+
+		err := newError(fn, msg, originalError)
+		require.Error(t, err)
+
+		wantContains := []string{fn, msg, originalError.Error(), ":"}
+
+		for _, s := range wantContains {
+			assert.Contains(t, err.Error(), s)
+		}
+
+		want := fmt.Sprintf("%s: %s: %s", fn, msg, originalError.Error())
+		assert.Equal(t, want, err.Error())
+	})
+
+	t.Run("without_msg", func(t *testing.T) {
+		const fn = "TestFunc"
+
+		var originalError error = errors.New("org")
+
+		err := newError(fn, emptyMsg, originalError)
+		require.Error(t, err)
+
+		wantContains := []string{fn, emptyMsg, originalError.Error(), ":"}
+
+		for _, s := range wantContains {
+			assert.Contains(t, err.Error(), s)
+		}
+
+		want := fmt.Sprintf("%s: %s", fn, originalError.Error())
+		assert.Equal(t, want, err.Error())
+	})
+}
+
+func TestString(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		const fn = "TestFunc"
+
+		var msg = "msg"
+		var originalError error = errors.New("org")
+
+		err := newError(fn, msg, originalError)
+		require.Error(t, err)
+
+		e, ok := err.(Error)
+		require.True(t, ok)
+
+		wantContains := []string{fn, msg, originalError.Error(), ":"}
+
+		for _, s := range wantContains {
+			assert.Contains(t, e.String(), s)
+		}
+
+		want := fmt.Sprintf("%s: %s: %s", fn, msg, originalError.Error())
+		assert.Equal(t, want, e.String())
+	})
+
+	t.Run("without_msg", func(t *testing.T) {
+		const fn = "TestFunc"
+
+		var originalError error = errors.New("org")
+
+		err := newError(fn, emptyMsg, originalError)
+		require.Error(t, err)
+
+		e, ok := err.(Error)
+		require.True(t, ok)
+
+		wantContains := []string{fn, emptyMsg, originalError.Error(), ":"}
+
+		for _, s := range wantContains {
+			assert.Contains(t, e.String(), s)
+		}
+
+		want := fmt.Sprintf("%s: %s", fn, originalError.Error())
+		assert.Equal(t, want, e.String())
+	})
+}
+
+func TestUnwrap(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		const fn = "TestFunc"
+		var originalError error = errors.New("org")
+
+		err := newError(fn, emptyMsg, originalError)
+		require.Error(t, err)
+
+		e, ok := err.(Error)
+		require.True(t, ok)
+
+		assert.ErrorIs(t, e.Unwrap(), originalError)
+	})
+}
+
+func Test_isNil(t *testing.T) {
+	t.Run("not_nil", func(t *testing.T) {
+		assert.False(t, isNil(errors.New("error")))
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		assert.True(t, isNil(nil))
+	})
+}
+
+func Test_isEmptyMsg(t *testing.T) {
+	t.Run("non_empty", func(t *testing.T) {
+		assert.False(t, isEmptyMsg("not empty"))
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		assert.True(t, isEmptyMsg(emptyMsg))
+	})
 }
