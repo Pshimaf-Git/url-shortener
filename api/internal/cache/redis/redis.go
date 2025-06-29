@@ -57,7 +57,7 @@ func ping(ctx context.Context, rdb *redis.Client) error {
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		rdb.Close()
-		return wp.Wrap(errors.New("redis.client.Ping"))
+		return wp.Wrap(err)
 	}
 
 	return nil
