@@ -238,3 +238,27 @@ func TestClose(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func Test_ping(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	t.Run("happy_path", func(t *testing.T) {
+		err := ping(context.Background(), client.rdb)
+		assert.NoError(t, err)
+	})
+
+	t.Run("context_canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := ping(ctx, client.rdb)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("nil_rdb", func(t *testing.T) {
+		err := ping(context.Background(), nil)
+		assert.Error(t, err)
+	})
+}
