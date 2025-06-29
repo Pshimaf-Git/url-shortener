@@ -15,12 +15,12 @@ func New(funcName string) Wraper {
 }
 
 func (wp Wraper) WrapMsg(msg string, err error) error {
-	if err == nil {
+	if isNil(err) {
 		return nil
 	}
 
 	if msg == "" {
-		return fmt.Errorf("%s: %w", wp.FuncName, err)
+		return wp.Wrap(err)
 	}
 
 	return fmt.Errorf("%s: %s: %w", wp.FuncName, msg, err)
@@ -31,41 +31,57 @@ func (wp Wraper) Wrapf(err error, format string, args ...any) error {
 }
 
 func (wp Wraper) Wrap(err error) error {
-	if err == nil {
+	if isNil(err) {
 		return nil
 	}
 
 	return fmt.Errorf("%s: %w", wp.FuncName, err)
 }
 
-func Wrap(fn string, err error) error {
-	if err == nil {
+func (wp Wraper) WrapN(errs ...error) error {
+	var n int
+	for _, err := range errs {
+		if !isNil(err) {
+			n++
+		}
+	}
+
+	if n == 0 {
 		return nil
 	}
 
-	return fmt.Errorf("%s: %w", fn, err)
+	nonNilErrs := make([]error, 0, n)
+	for _, err := range errs {
+		if !isNil(err) {
+			nonNilErrs = append(nonNilErrs, err)
+		}
+	}
+
+	result := nonNilErrs[0]
+
+	for _, err := range nonNilErrs[1:] {
+		result = fmt.Errorf("%w: %w", result, err)
+	}
+
+	return wp.Wrap(result)
 }
 
-// WrapMsg annotates err with additional context while preserving the original error.
-// The message is formatted as "fn: msg: err" if msg is non-empty,
-// or "fn: err" if msg is empty.
-//
-// The returned error implements an Unwrap method returning the original err,
-// making it compatible with errors.Is and errors.As.
-//
-// If err is nil, Wrap returns nil.
+func Wrap(fn string, err error) error {
+	return New(fn).Wrap(err)
+}
+
 func WrapMsg(fn string, msg string, err error) error {
-	if err == nil {
-		return nil
-	}
-
-	if msg == "" {
-		return fmt.Errorf("%s: %w", fn, err)
-	}
-
-	return fmt.Errorf("%s: %s: %w", fn, msg, err)
+	return New(fn).WrapMsg(msg, err)
 }
 
 func Wrapf(fn string, err error, format string, args ...any) error {
-	return WrapMsg(fn, fmt.Sprintf(format, args...), err)
+	return New(fn).Wrapf(err, format, args...)
+}
+
+func WrapN(fn string, errs ...error) error {
+	return New(fn).WrapN(errs...)
+}
+
+func isNil(err error) bool {
+	return err == nil
 }
