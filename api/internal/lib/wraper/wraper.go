@@ -8,6 +8,10 @@ type Wraper struct {
 	FuncName string
 }
 
+const (
+	emptyMsg = ""
+)
+
 func New(funcName string) Wraper {
 	return Wraper{
 		FuncName: funcName,
@@ -19,11 +23,11 @@ func (wp Wraper) WrapMsg(msg string, err error) error {
 		return nil
 	}
 
-	if msg == "" {
+	if isEmptyMsg(msg) {
 		return wp.Wrap(err)
 	}
 
-	return fmt.Errorf("%s: %s: %w", wp.FuncName, msg, err)
+	return newError(wp.FuncName, msg, err)
 }
 
 func (wp Wraper) Wrapf(err error, format string, args ...any) error {
@@ -35,35 +39,7 @@ func (wp Wraper) Wrap(err error) error {
 		return nil
 	}
 
-	return fmt.Errorf("%s: %w", wp.FuncName, err)
-}
-
-func (wp Wraper) WrapN(errs ...error) error {
-	var n int
-	for _, err := range errs {
-		if !isNil(err) {
-			n++
-		}
-	}
-
-	if n == 0 {
-		return nil
-	}
-
-	nonNilErrs := make([]error, 0, n)
-	for _, err := range errs {
-		if !isNil(err) {
-			nonNilErrs = append(nonNilErrs, err)
-		}
-	}
-
-	result := nonNilErrs[0]
-
-	for _, err := range nonNilErrs[1:] {
-		result = fmt.Errorf("%w: %w", result, err)
-	}
-
-	return wp.Wrap(result)
+	return newError(wp.FuncName, emptyMsg, err)
 }
 
 func Wrap(fn string, err error) error {
@@ -78,10 +54,10 @@ func Wrapf(fn string, err error, format string, args ...any) error {
 	return New(fn).Wrapf(err, format, args...)
 }
 
-func WrapN(fn string, errs ...error) error {
-	return New(fn).WrapN(errs...)
-}
-
 func isNil(err error) bool {
 	return err == nil
+}
+
+func isEmptyMsg(msg string) bool {
+	return msg == emptyMsg
 }
