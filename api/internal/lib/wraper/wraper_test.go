@@ -18,7 +18,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestWraper_Wrap(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name     string
 		fn       string
 		err      error
@@ -40,7 +40,7 @@ func TestWraper_Wrap(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Wraper struct method
 			wp := New(tt.fn)
@@ -57,7 +57,7 @@ func TestWraper_Wrap(t *testing.T) {
 }
 
 func TestWraper_WrapMsg(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		funcName    string
 		msg         string
@@ -90,7 +90,7 @@ func TestWraper_WrapMsg(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			wp := New(tt.funcName)
 
@@ -175,8 +175,87 @@ func TestWraper_Wrapf(t *testing.T) {
 	}
 }
 
-func TestWrap(t *testing.T) {
+func TestWraper_WrapN(t *testing.T) {
 	tests := []struct {
+		name     string
+		funcName string
+		errs     []error
+		want     string
+		wantNil  bool
+	}{
+		{
+			name:     "no errors",
+			funcName: "TestFunc",
+			errs:     []error{},
+			wantNil:  true,
+		},
+		{
+			name:     "all nil errors",
+			funcName: "TestFunc",
+			errs:     []error{nil, nil, nil},
+			wantNil:  true,
+		},
+		{
+			name:     "single error",
+			funcName: "TestFunc",
+			errs:     []error{errors.New("first error")},
+			want:     "TestFunc: first error",
+		},
+		{
+			name:     "multiple errors",
+			funcName: "ProcessData",
+			errs: []error{
+				errors.New("db connection failed"),
+				errors.New("query failed"),
+				errors.New("marshal failed"),
+			},
+			want: "ProcessData: db connection failed: query failed: marshal failed",
+		},
+		{
+			name:     "mixed nil and non-nil errors",
+			funcName: "ValidateInput",
+			errs: []error{
+				nil,
+				errors.New("invalid email"),
+				nil,
+				errors.New("missing name"),
+				nil,
+			},
+			want: "ValidateInput: invalid email: missing name",
+		},
+		{
+			name:     "wrapped errors",
+			funcName: "ComplexOperation",
+			errs: []error{
+				errors.New("initial error"),
+				Wrap("SubOperation", errors.New("sub error")),
+				errors.New("final error"),
+			},
+			want: "ComplexOperation: initial error: SubOperation: sub error: final error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wp := New(tt.funcName)
+			got := wp.WrapN(tt.errs...)
+
+			if tt.wantNil {
+				assert.Nil(t, got, "should return nil")
+				return
+			}
+
+			if !assert.NotNil(t, got, "should return error") {
+				return
+			}
+
+			assert.Equal(t, tt.want, got.Error(), "error message mismatch")
+		})
+	}
+}
+
+func TestWrap(t *testing.T) {
+	testCases := []struct {
 		name     string
 		fn       string
 		err      error
@@ -198,7 +277,7 @@ func TestWrap(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			err := Wrap(tt.fn, tt.err)
 			if !tt.wantErr {
@@ -213,7 +292,7 @@ func TestWrap(t *testing.T) {
 }
 
 func TestWrapMsg(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		funcName    string
 		msg         string
@@ -246,7 +325,7 @@ func TestWrapMsg(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			err := WrapMsg(tt.funcName, tt.msg, tt.err)
 			if !tt.wantErr {
@@ -324,6 +403,84 @@ func TestWrapf(t *testing.T) {
 				assert.Equal(t, tt.wantCont, err.Error())
 				assert.ErrorIs(t, err, tt.input.err)
 			}
+		})
+	}
+}
+
+func TestWraperWrapN(t *testing.T) {
+	tests := []struct {
+		name     string
+		funcName string
+		errs     []error
+		want     string
+		wantNil  bool
+	}{
+		{
+			name:     "no errors",
+			funcName: "TestFunc",
+			errs:     []error{},
+			wantNil:  true,
+		},
+		{
+			name:     "all nil errors",
+			funcName: "TestFunc",
+			errs:     []error{nil, nil, nil},
+			wantNil:  true,
+		},
+		{
+			name:     "single error",
+			funcName: "TestFunc",
+			errs:     []error{errors.New("first error")},
+			want:     "TestFunc: first error",
+		},
+		{
+			name:     "multiple errors",
+			funcName: "ProcessData",
+			errs: []error{
+				errors.New("db connection failed"),
+				errors.New("query failed"),
+				errors.New("marshal failed"),
+			},
+			want: "ProcessData: db connection failed: query failed: marshal failed",
+		},
+		{
+			name:     "mixed nil and non-nil errors",
+			funcName: "ValidateInput",
+			errs: []error{
+				nil,
+				errors.New("invalid email"),
+				nil,
+				errors.New("missing name"),
+				nil,
+			},
+			want: "ValidateInput: invalid email: missing name",
+		},
+		{
+			name:     "wrapped errors",
+			funcName: "ComplexOperation",
+			errs: []error{
+				errors.New("initial error"),
+				Wrap("SubOperation", errors.New("sub error")),
+				errors.New("final error"),
+			},
+			want: "ComplexOperation: initial error: SubOperation: sub error: final error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := WrapN(tt.funcName, tt.errs...)
+
+			if tt.wantNil {
+				assert.Nil(t, got, "should return nil")
+				return
+			}
+
+			if !assert.NotNil(t, got, "should return error") {
+				return
+			}
+
+			assert.Equal(t, tt.want, got.Error(), "error message mismatch")
 		})
 	}
 }
