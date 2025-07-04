@@ -336,12 +336,8 @@ func Test_newError(t *testing.T) {
 		var msg = "msg"
 		var originalError error = errors.New("org")
 
-		newErr := newError(fn, msg, originalError)
-
-		require.Error(t, newErr)
-
-		e, ok := newErr.(Error)
-		assert.True(t, ok)
+		e := newError(fn, msg, originalError)
+		require.Error(t, e)
 
 		assert.Equal(t, fn, e.Fn)
 		assert.Equal(t, msg, e.Msg)
@@ -355,12 +351,8 @@ func Test_newError(t *testing.T) {
 
 		var originalError error = errors.New("org")
 
-		newErr := newError(fn, emptyMsg, originalError)
-
-		require.Error(t, newErr)
-
-		e, ok := newErr.(Error)
-		assert.True(t, ok)
+		e := newError(fn, emptyMsg, originalError)
+		require.Error(t, e)
 
 		assert.Equal(t, fn, e.Fn)
 		assert.Equal(t, emptyMsg, e.Msg)
@@ -414,51 +406,6 @@ func TestError(t *testing.T) {
 	})
 }
 
-func TestString(t *testing.T) {
-	t.Run("happy_path", func(t *testing.T) {
-		const fn = "TestFunc"
-
-		var msg = "msg"
-		var originalError error = errors.New("org")
-
-		err := newError(fn, msg, originalError)
-		require.Error(t, err)
-
-		e, ok := err.(Error)
-		require.True(t, ok)
-
-		wantContains := []string{fn, msg, originalError.Error(), ":"}
-
-		for _, s := range wantContains {
-			assert.Contains(t, e.String(), s)
-		}
-
-		want := fmt.Sprintf("%s: %s: %s", fn, msg, originalError.Error())
-		assert.Equal(t, want, e.String())
-	})
-
-	t.Run("without_msg", func(t *testing.T) {
-		const fn = "TestFunc"
-
-		var originalError error = errors.New("org")
-
-		err := newError(fn, emptyMsg, originalError)
-		require.Error(t, err)
-
-		e, ok := err.(Error)
-		require.True(t, ok)
-
-		wantContains := []string{fn, emptyMsg, originalError.Error(), ":"}
-
-		for _, s := range wantContains {
-			assert.Contains(t, e.String(), s)
-		}
-
-		want := fmt.Sprintf("%s: %s", fn, originalError.Error())
-		assert.Equal(t, want, e.String())
-	})
-}
-
 func TestUnwrap(t *testing.T) {
 	t.Run("happy_path", func(t *testing.T) {
 		const fn = "TestFunc"
@@ -467,10 +414,7 @@ func TestUnwrap(t *testing.T) {
 		err := newError(fn, emptyMsg, originalError)
 		require.Error(t, err)
 
-		e, ok := err.(Error)
-		require.True(t, ok)
-
-		assert.ErrorIs(t, e.Unwrap(), originalError)
+		assert.ErrorIs(t, err.Unwrap(), originalError)
 	})
 }
 
