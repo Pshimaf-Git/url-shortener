@@ -30,12 +30,18 @@ func setupTestContext() (*ReqContext, *httptest.ResponseRecorder) {
 }
 
 func TestCloseBody(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	err := c.CloseBody()
 	assert.NoError(t, err)
 }
 
 func TestCloseBodyError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Body = &mockReadCloser{closeErr: errors.New("close error")}
 
@@ -52,6 +58,9 @@ func (m *mockReadCloser) Read(p []byte) (n int, err error) { return 0, io.EOF }
 func (m *mockReadCloser) Close() error                     { return m.closeErr }
 
 func TestURL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	u := c.URL()
 	require.NotNil(t, u)
@@ -59,6 +68,9 @@ func TestURL(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	query := c.Query()
 	require.NotNil(t, query)
@@ -66,24 +78,36 @@ func TestQuery(t *testing.T) {
 }
 
 func TestGetParam(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "value", c.GetParam("param"))
 	assert.Empty(t, c.GetParam("nonexistent"))
 }
 
 func TestGetChiParam(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "chiValue", c.GetChiParam("chiParam"))
 	assert.Empty(t, c.GetChiParam("nonexistent"))
 }
 
 func TestGetChiParamFromCtx(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "chiValue", c.GetChiParamFromCtx("chiParam"))
 	assert.Empty(t, c.GetChiParamFromCtx("nonexistent"))
 }
 
 func TestRequest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	req := c.Request()
 	require.NotNil(t, req)
@@ -91,6 +115,9 @@ func TestRequest(t *testing.T) {
 }
 
 func TestResponceWriter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, w := setupTestContext()
 	rw := c.ResponceWriter()
 	require.NotNil(t, rw)
@@ -98,6 +125,9 @@ func TestResponceWriter(t *testing.T) {
 }
 
 func TestRequestID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 
 	ctx := context.WithValue(c.Context(), middleware.RequestIDKey, "test-id")
@@ -106,6 +136,9 @@ func TestRequestID(t *testing.T) {
 }
 
 func TestHeader(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	headers := c.Header()
 	require.NotNil(t, headers)
@@ -114,6 +147,9 @@ func TestHeader(t *testing.T) {
 }
 
 func TestContext(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	ctx := c.Context()
 	require.NotNil(t, ctx)
@@ -121,12 +157,18 @@ func TestContext(t *testing.T) {
 }
 
 func TestWriteHeader(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, w := setupTestContext()
 	c.WriteHeader(http.StatusTeapot)
 	assert.Equal(t, http.StatusTeapot, w.Code)
 }
 
 func TestDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	deadline, ok := c.Deadline()
 	assert.False(t, ok)
@@ -134,6 +176,9 @@ func TestDeadline(t *testing.T) {
 }
 
 func TestDone(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -160,6 +205,9 @@ func TestDone(t *testing.T) {
 }
 
 func TestForm(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	t.Run("nil for GET requests", func(t *testing.T) {
 		c, _ := setupTestContext()
 		form := c.Form()
@@ -167,7 +215,6 @@ func TestForm(t *testing.T) {
 	})
 
 	t.Run("populated for POST requests", func(t *testing.T) {
-
 		body := strings.NewReader("key=value")
 		req := httptest.NewRequest("POST", "/", body)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -184,11 +231,17 @@ func TestForm(t *testing.T) {
 }
 
 func TestErr(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Nil(t, c.Err())
 }
 
 func TestValue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	key := "test-key"
 	val := "test-value"
@@ -198,32 +251,50 @@ func TestValue(t *testing.T) {
 }
 
 func TestBody(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	body := c.Body()
 	require.NotNil(t, body)
 }
 
 func TestMethod(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, http.MethodGet, c.Method())
 }
 
 func TestURI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "/test?param=value", c.URI())
 }
 
 func TestUserAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "", c.UserAgent())
 }
 
 func TestHost(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "example.com", c.Host())
 }
 
 func TestTLS(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := New(w, r)
 		assert.NotNil(t, c.TLS())
@@ -236,25 +307,39 @@ func TestTLS(t *testing.T) {
 }
 
 func TestProto(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, "HTTP/1.1", c.Proto())
 }
 
 func TestProtoMajor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, 1, c.ProtoMajor())
 }
 
 func TestProtoMinor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, 1, c.ProtoMinor())
 }
 
 func TestContentLength(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
 	c, _ := setupTestContext()
 	assert.Equal(t, int64(0), c.ContentLength())
 }
 
+// Остальные тесты (JSON, XML, FORM, DecodeXML, DecodeJSON, DecodeFORM) остаются без изменений
+// Они будут выполняться даже в short mode
 func TestJSON(t *testing.T) {
 	tests := []struct {
 		name           string
