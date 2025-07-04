@@ -105,10 +105,10 @@ var levels = map[string]slog.Level{
 	ERROR: slog.LevelError,
 }
 
-func (cfg *Config) LevelFromString() (slog.Level, error) {
-	lvl, ok := levels[strings.TrimSpace(strings.ToLower(cfg.Logger.Level))]
+func (cfg *LoggerConfig) LevelFromString() (slog.Level, error) {
+	lvl, ok := levels[strings.TrimSpace(strings.ToLower(cfg.Level))]
 	if !ok {
-		return slog.Level(-1), errors.New("LevelFromString: unknown logger level")
+		return slog.Level(-1), wraper.Wrap("LevelFromString", errors.New("unknown logger level"))
 	}
 	return lvl, nil
 }
