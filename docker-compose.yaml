@@ -2,7 +2,7 @@ services:
   app:
     image: 'url-shortener'
     build:
-      context: ./api
+      context: .
       dockerfile: Dockerfile
     container_name: url-shortener-app
     env_file:
