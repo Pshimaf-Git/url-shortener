@@ -13,12 +13,13 @@ const reqID = handlers.RequestID
 
 func New(log *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		log.Info("using midleware/Logger")
+		log.Info("using middleware/Logger")
 
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			entry := log.With(
 				slog.String(reqID, middleware.GetReqID(r.Context())),
 				slog.String("method", r.Method),
+				slog.String("schema", r.URL.Scheme),
 				slog.String("path", r.URL.Path),
 				slog.String("remote_addr", r.RemoteAddr),
 				slog.String("URI", r.RequestURI),
@@ -37,6 +38,7 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 
 			}()
 
+			entry.Info("request starting")
 			next.ServeHTTP(ww, r)
 		}
 
