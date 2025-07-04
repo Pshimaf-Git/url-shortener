@@ -19,6 +19,7 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/server"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 )
 
 const (
@@ -81,9 +82,11 @@ func realMain(ctx context.Context) error {
 	h := handlers.New(db, cache, &cfg.Server, log)
 
 	mws := []func(http.Handler) http.Handler{
-		logger.New(log),
 		middleware.RequestID,
-		middleware.Recoverer}
+		middleware.Recoverer,
+		httprate.LimitByRealIP(cfg.Server.RequesLimit, cfg.Server.WindowLength),
+		logger.New(log),
+	}
 
 	router := h.InitRoutes(mws...)
 
@@ -107,7 +110,7 @@ func realMain(ctx context.Context) error {
 func setupLogger(cfg *config.Config) (*slog.Logger, error) {
 	lvl, err := cfg.LevelFromString()
 	if err != nil {
-		return nil, wraper.Wrap("setupLogger", err)
+		return nil, wraper.Wrapf("setupLogger", err, "level=%s", lvl.String())
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Env)) {
