@@ -19,14 +19,6 @@ func New(funcName string) Wraper {
 }
 
 func (wp Wraper) WrapMsg(msg string, err error) error {
-	if isNil(err) {
-		return nil
-	}
-
-	if isEmptyMsg(msg) {
-		return wp.Wrap(err)
-	}
-
 	return newError(wp.FuncName, msg, err)
 }
 
@@ -35,10 +27,6 @@ func (wp Wraper) Wrapf(err error, format string, args ...any) error {
 }
 
 func (wp Wraper) Wrap(err error) error {
-	if isNil(err) {
-		return nil
-	}
-
 	return newError(wp.FuncName, emptyMsg, err)
 }
 
