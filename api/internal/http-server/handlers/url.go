@@ -126,7 +126,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 
 func (h *Handler) NewDelete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const fn = "handlers.Dselete"
+		const fn = "handlers.Delete"
 		c := reqcontext.New(w, r)
 
 		log := h.log.With(
@@ -180,7 +180,7 @@ func (h *Handler) NewDelete() http.HandlerFunc {
 			}
 		}
 
-		log.Error("deleted from cache", sl.Error(err))
+		log.Info("delete from cache successesfuly")
 
 		c.JSON(http.StatusOK, Responce{
 			Response: resp.OK(),
