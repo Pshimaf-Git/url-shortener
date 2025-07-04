@@ -7,6 +7,8 @@ server:
   read_timeout: 5m
   write_timeout: 5m
   std_alias_len: 5
+  request_limit: 120
+  window_length: 1m30s
 
 postgres:
   host: postgres
