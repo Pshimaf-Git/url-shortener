@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /app/bin/url-shortener ./cmd/app
+RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /app/bin/url-shortener ./api/cmd/app
 
 FROM alpine:latest
 
@@ -19,7 +19,7 @@ WORKDIR /app
 
 COPY --from=builder /app/bin/url-shortener .
 
-COPY configs/config.yaml /app/configs/config.yaml
+COPY api/configs/config.yaml /app/configs/config.yaml
 
 EXPOSE 8000
 
