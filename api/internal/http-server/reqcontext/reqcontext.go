@@ -81,11 +81,12 @@ func (c *ReqContext) FORM(status int, v any) {
 func (c *ReqContext) Request() *http.Request              { return c.r }
 func (c *ReqContext) ResponceWriter() http.ResponseWriter { return c.w }
 
-func (c *ReqContext) RequestID() string           { return middleware.GetReqID(c.Context()) }
-func (c *ReqContext) Header() http.Header         { return c.w.Header() }
-func (c *ReqContext) Write(v []byte) (int, error) { return c.w.Write(v) }
-func (c *ReqContext) Context() context.Context    { return c.r.Context() }
-func (c *ReqContext) WriteHeader(status int)      { c.w.WriteHeader(status) }
+func (c *ReqContext) RequestID() string                  { return middleware.GetReqID(c.Context()) }
+func (c *ReqContext) Header() http.Header                { return c.w.Header() }
+func (c *ReqContext) Write(v []byte) (int, error)        { return c.w.Write(v) }
+func (c *ReqContext) Context() context.Context           { return c.r.Context() }
+func (c *ReqContext) WriteHeader(status int)             { c.w.WriteHeader(status) }
+func (c *ReqContext) SetHeader(key string, value string) { c.w.Header().Set(key, value) }
 
 func (c *ReqContext) Deadline() (time.Time, bool) { return c.r.Context().Deadline() }
 func (c *ReqContext) Done() <-chan struct{}       { return c.r.Context().Done() }
