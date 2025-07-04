@@ -32,6 +32,8 @@ type ServerConfig struct {
 	IdleTimeout  time.Duration `yaml:"idle_timeout"  env:"SERVER_IDLE_TIMEOUT"  env-default:"10m"`
 	ReadTimeout  time.Duration `yaml:"read_timeout"  env:"SERVER_READ_TIMEOUT"  env-default:"5m"`
 	WriteTimeout time.Duration `yaml:"write_timeout" env:"SERVER_WRITE_TIMEOUT" env-default:"5m"`
+	RequesLimit  int           `yaml:"request_limit" env:"SERVER_REQUEST_LIMIT" env-default:"100"`
+	WindowLength time.Duration `yaml:"window_length" env:"SERVER_WINDOW_LENGTH" env-default:"1m"`
 }
 
 type PostreSQLConfig struct {
