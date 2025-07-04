@@ -17,7 +17,7 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/handlers"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/middleware/logger"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/server"
-	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/logger/zaphandler"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 )
@@ -57,10 +57,11 @@ func realMain(ctx context.Context) error {
 		return err
 	}
 
-	log, err := setupLogger(cfg)
+	log, cleanup, err := setupLogger(cfg)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 
 	log.Info("server starting", slog.String("env", cfg.Env), slog.String("host", cfg.Server.Host), slog.String("port", cfg.Server.Port))
 
@@ -107,28 +108,43 @@ func realMain(ctx context.Context) error {
 	return nil
 }
 
-func setupLogger(cfg *config.Config) (*slog.Logger, error) {
-	lvl, err := cfg.LevelFromString()
+func setupLogger(cfg *config.Config) (*slog.Logger, func() error, error) {
+	lvl, err := cfg.Logger.LevelFromString()
 	if err != nil {
-		return nil, wraper.Wrapf("setupLogger", err, "level=%s", lvl.String())
+		return nil, nil, err
 	}
+
+	var (
+		h       slog.Handler
+		cleanup func() error
+		herr    error
+	)
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Env)) {
 	case prod:
-		return slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}),
-		), nil
-
+		zapH, err := zaphandler.NewProduction(lvl)
+		cleanup = zapH.Logger().Sync
+		herr = err
+		h = zapH
 	case dev:
-		return slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}),
-		), nil
-
+		zapH, err := zaphandler.NewDevelopment(lvl)
+		cleanup = zapH.Logger().Sync
+		herr = err
+		h = zapH
 	case local:
-		return slog.New(
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}),
-		), nil
+		zapH, err := zaphandler.NewLocal(lvl)
+		cleanup = zapH.Logger().Sync
+		herr = err
+		h = zapH
 	}
 
-	return nil, errors.New("setupLogger: unknown environment")
+	if h == nil {
+		return nil, nil, errors.New("setupLogger: unknown environment")
+	}
+
+	if herr != nil {
+		return nil, nil, herr
+	}
+
+	return slog.New(h), cleanup, nil
 }
