@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/reqcontext"
+	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/sl"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/wraper"
 )
@@ -82,6 +85,21 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 	}()
 
 	return url, nil
+}
+
+func (h *Handler) helthy(w http.ResponseWriter, r *http.Request) {
+	c := reqcontext.New(w, r)
+
+	if h.badConfigurate() {
+		c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.OK())
+}
+
+func (h *Handler) badConfigurate() bool {
+	return h.cache == nil || h.storage == nil || h.log == nil || h.cfg == nil
 }
 
 func isValidURL(urlToCheck string) bool {
