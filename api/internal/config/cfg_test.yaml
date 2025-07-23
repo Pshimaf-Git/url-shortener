@@ -7,6 +7,8 @@ server:
   read_timeout: 1m
   write_timeout: 1m
   std_alias_len: 5
+  request_limit: 120
+  window_length: 1m
 
 postgres:
   host: 0.0.0.0
@@ -14,6 +16,12 @@ postgres:
   port: '5432'
   user: postgres
   ssl_mode: disable
+  options:
+    max_conns: 10
+    min_conns: 1
+    max_conn_life_time: 1m
+    max_conn_idle_time: 1m
+    check_helth_period: 1m
 
 redis:
   host: 0.0.0.0

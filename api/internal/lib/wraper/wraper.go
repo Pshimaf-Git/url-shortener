@@ -42,10 +42,50 @@ func Wrapf(fn string, err error, format string, args ...any) error {
 	return New(fn).Wrapf(err, format, args...)
 }
 
-func isNil(err error) bool {
-	return err == nil
+func IsWraped(err error) *Error {
+	seen := make(map[error]struct{})
+	return isWraped(err, seen)
 }
 
-func isEmptyMsg(msg string) bool {
-	return msg == emptyMsg
+func isWraped(err error, seen map[error]struct{}) *Error {
+	if err == nil {
+		return nil
+	}
+
+	e, ok := err.(*Error)
+	if !ok {
+		if _, ok := seen[err]; ok {
+			return nil
+		}
+
+		switch x := err.(type) {
+		case interface{ Unwrap() *Error }:
+			return x.Unwrap()
+
+		case interface{ Unwrap() error }:
+			u := x.Unwrap()
+			if u == nil {
+				return nil
+			}
+
+			seen[err] = struct{}{}
+
+			return isWraped(u, seen)
+
+		case interface{ Unwrap() []error }:
+			for _, er := range x.Unwrap() {
+				if er != nil {
+					seen[err] = struct{}{}
+					e := isWraped(er, seen)
+					if e != nil {
+						return e
+					}
+				}
+			}
+		}
+
+		return nil
+	}
+
+	return e
 }

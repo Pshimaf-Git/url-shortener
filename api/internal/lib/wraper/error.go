@@ -14,7 +14,7 @@ type Error struct {
 	Err error
 }
 
-func newError(fn string, msg string, err error) *Error {
+func newError(fn string, msg string, err error) error {
 	if isNil(err) {
 		return nil
 	}
@@ -40,4 +40,12 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error {
 	return e.Err
+}
+
+func isNil(err error) bool {
+	return err == nil
+}
+
+func isEmptyMsg(msg string) bool {
+	return msg == emptyMsg
 }

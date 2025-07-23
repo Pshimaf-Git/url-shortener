@@ -18,7 +18,7 @@ import (
 //
 // BEFORE EXEC THESE COMMAND IN TETMINAL
 //
-// docker run --rm --name TEST-POSTGRES -e POSTGRES_PASSWORD=PASSWORD -p 5432:5432 -d postgres:13-alpine
+// docker run --rm --name TEST-POSTGRES -e POSTGRES_PASSWORD=PASSWORD -p 5432:5432 -d 13-alpine
 //
 // these command create a docker container with pistgres database for test
 //

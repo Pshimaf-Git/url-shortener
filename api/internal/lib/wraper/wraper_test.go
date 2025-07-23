@@ -1,8 +1,11 @@
 package wraper
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -336,8 +339,11 @@ func Test_newError(t *testing.T) {
 		var msg = "msg"
 		var originalError error = errors.New("org")
 
-		e := newError(fn, msg, originalError)
-		require.Error(t, e)
+		err := newError(fn, msg, originalError)
+		require.Error(t, err)
+
+		e, ok := err.(*Error)
+		require.True(t, ok)
 
 		assert.Equal(t, fn, e.Fn)
 		assert.Equal(t, msg, e.Msg)
@@ -351,8 +357,11 @@ func Test_newError(t *testing.T) {
 
 		var originalError error = errors.New("org")
 
-		e := newError(fn, emptyMsg, originalError)
-		require.Error(t, e)
+		err := newError(fn, emptyMsg, originalError)
+		require.Error(t, err)
+
+		e, ok := err.(*Error)
+		require.True(t, ok)
 
 		assert.Equal(t, fn, e.Fn)
 		assert.Equal(t, emptyMsg, e.Msg)
@@ -414,13 +423,16 @@ func TestUnwrap(t *testing.T) {
 		err := newError(fn, emptyMsg, originalError)
 		require.Error(t, err)
 
-		assert.ErrorIs(t, err.Unwrap(), originalError)
+		e, ok := err.(*Error)
+		require.True(t, ok)
+
+		assert.ErrorIs(t, e.Unwrap(), originalError)
 	})
 }
 
 func Test_isNil(t *testing.T) {
 	t.Run("not_nil", func(t *testing.T) {
-		assert.False(t, isNil(errors.New("error")))
+		assert.False(t, isNil(assert.AnError))
 	})
 
 	t.Run("nil", func(t *testing.T) {
@@ -435,5 +447,110 @@ func Test_isEmptyMsg(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		assert.True(t, isEmptyMsg(emptyMsg))
+	})
+}
+
+func TestIsWraped(t *testing.T) {
+	t.Run("happy_path", func(t *testing.T) {
+		const fn = "Test"
+		msg := "message"
+		wp := New(fn)
+		werr := wp.WrapMsg(msg, assert.AnError)
+
+		e := IsWraped(werr)
+		require.NotNil(t, e)
+
+		assert.ErrorIs(t, werr, assert.AnError)
+		assert.ErrorIs(t, e, assert.AnError)
+
+		assert.ErrorIs(t, assert.AnError, e.Err)
+		assert.ErrorIs(t, assert.AnError, e.Unwrap())
+
+		assert.Contains(t, e.Error(), fn)
+		assert.Contains(t, e.Error(), msg)
+		assert.Contains(t, e.Error(), assert.AnError.Error())
+
+		assert.Equal(t, assert.AnError.Error(), e.Unwrap().Error())
+		assert.Equal(t, assert.AnError.Error(), e.Err.Error())
+
+		assert.Equal(t, msg, e.Msg)
+		assert.Equal(t, fn, e.Fn)
+
+		assert.Equal(t, fmt.Sprintf("%s: %s: %s", fn, msg, assert.AnError.Error()), e.Error())
+	})
+
+	t.Run("nil_error", func(t *testing.T) {
+		werr := IsWraped(New("Test").Wrap(nil))
+		assert.Nil(t, werr)
+	})
+
+	t.Run("bad_type", func(t *testing.T) {
+		var pathErr error = &os.PathError{
+			Op:   "MyFunc",
+			Path: "D:/usr/go/src/os",
+			Err:  assert.AnError,
+		}
+
+		var syscallErr error = &os.SyscallError{
+			Syscall: "syscall",
+			Err:     pathErr,
+		}
+
+		err := fmt.Errorf("%w: %w", pathErr, syscallErr)
+
+		e := IsWraped(err)
+		assert.Nil(t, e)
+	})
+
+	t.Run("long_error_wrap", func(t *testing.T) {
+		baseFN := "fn"
+		baseErr := assert.AnError
+		baseWrapedErr := Wrap(baseFN, baseErr)
+
+		var pathErr error = &os.PathError{
+			Op:   "MyFunc",
+			Path: "D:/usr/go/src/os",
+			Err:  baseWrapedErr,
+		}
+
+		var syscallErr error = &os.SyscallError{
+			Syscall: "syscall",
+			Err:     pathErr,
+		}
+
+		var linkErr error = &os.LinkError{
+			Op:  "MyOp",
+			Old: "old",
+			New: "new",
+			Err: syscallErr,
+		}
+
+		var ddlErr error = &syscall.DLLError{
+			Err:     linkErr,
+			ObjName: "obj",
+			Msg:     emptyMsg,
+		}
+
+		fmtErr := fmt.Errorf("%w: some string", fmt.Errorf("%w: %w: %w: %w", os.ErrClosed, bufio.ErrBufferFull, assert.AnError, ddlErr))
+
+		e := IsWraped(fmtErr)
+		require.NotNil(t, e)
+		require.NotNil(t, e.Err)
+
+		assert.ErrorIs(t, e, baseErr)
+
+		assert.Equal(t, baseErr.Error(), e.Err.Error())
+		assert.Equal(t, baseFN, e.Fn)
+	})
+
+	t.Run("round", func(t *testing.T) {
+		first := &os.PathError{}
+		second := &os.SyscallError{}
+
+		first.Err = second
+		second.Err = first
+
+		e := IsWraped(second)
+		assert.Nil(t, e)
 	})
 }

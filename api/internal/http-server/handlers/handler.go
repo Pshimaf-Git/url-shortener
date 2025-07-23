@@ -87,10 +87,34 @@ func (h *Handler) GetURLWithCache(ctx context.Context, alias string) (string, er
 	return url, nil
 }
 
-func (h *Handler) helthy(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteURLWithCache(ctx context.Context, alias string) (int64, error) {
+	const fn = "handlers.handler.(*Handler).DeleteURLWithCache"
+
+	wp := wraper.New(fn)
+
+	n, err := h.storage.DeleteURL(ctx, alias)
+	if err != nil {
+		if errors.Is(err, database.ErrURLNotFound) {
+			return 0, wp.Wrap(err)
+		}
+		return 0, wp.Wrap(err)
+	}
+
+	err = h.cache.Delete(ctx, alias)
+	if !errors.Is(err, cache.ErrKeyNotExist) {
+		h.log.Error("deleting URL from cache",
+			slog.String("key", alias),
+			sl.Error(err),
+		)
+	}
+
+	return n, nil
+}
+
+func (h *Handler) Helthy(w http.ResponseWriter, r *http.Request) {
 	c := reqcontext.New(w, r)
 
-	if h.badConfigurate() {
+	if h.BadConfigurate() {
 		c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
 		return
 	}
@@ -98,11 +122,11 @@ func (h *Handler) helthy(w http.ResponseWriter, r *http.Request) {
 	c.JSON(http.StatusOK, resp.OK())
 }
 
-func (h *Handler) badConfigurate() bool {
+func (h *Handler) BadConfigurate() bool {
 	return h.cache == nil || h.storage == nil || h.log == nil || h.cfg == nil
 }
 
-func isValidURL(urlToCheck string) bool {
+func IsValidURL(urlToCheck string) bool {
 	const (
 		HTTP  = "http"
 		HTTPs = "https"
@@ -148,6 +172,7 @@ var (
 	ErrInternalServer   = errors.New("internal server error")
 	ErrAliasExist       = errors.New("alias already exist")
 	ErrInvalidURLFormat = errors.New("invalid url format")
+	ErrTooManyRequests  = errors.New("too many requests")
 	ErrCanNotGenAlias   = errors.New("could not generate random unique alias, please try again")
 )
 

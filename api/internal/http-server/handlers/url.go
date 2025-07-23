@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/http-server/reqcontext"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
@@ -54,7 +53,7 @@ func (h *Handler) NewSave() http.HandlerFunc {
 			return
 		}
 
-		if !isValidURL(url) {
+		if !IsValidURL(url) {
 			h.log.Error("invalid URL format", slog.String("url", req.URL))
 
 			c.JSON(http.StatusBadRequest, resp.Error(ErrInvalidURLFormat))
@@ -148,39 +147,19 @@ func (h *Handler) NewDelete() http.HandlerFunc {
 
 		log.Info("decoded requst body")
 
-		_, err := h.storage.DeleteURL(c.Context(), alias)
+		_, err := h.DeleteURLWithCache(c.Context(), alias)
 		if err != nil {
-			if errors.Is(err, database.ErrURLNotFound) {
+			switch {
+			case errors.Is(err, database.ErrURLNotFound):
 				log.Info("url not found")
-
-				c.JSON(http.StatusBadRequest, resp.Error(ErrURLNotFound))
+				c.JSON(http.StatusNotFound, resp.Error(ErrURLNotFound))
 				return
-			}
-
-			log.Error("url deleter", sl.Error(err))
-
-			c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
-			return
-		}
-
-		log.Info("url deleted from database")
-
-		if err := h.cache.Delete(c.Context(), alias); err != nil {
-			if errors.Is(err, cache.ErrKeyNotExist) {
-				log.Info("alias alredy deleted or not found")
-			} else {
-				log.Error("delete from cache", sl.Error(err))
-
-				c.JSON(http.StatusInternalServerError, Responce{
-					Response: resp.Error(ErrInternalServer),
-					Alias:    alias,
-				})
-
+			default:
+				log.Error("failed to delete URL", sl.Error(err))
+				c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
 				return
 			}
 		}
-
-		log.Info("delete from cache successesfuly")
 
 		c.JSON(http.StatusOK, Responce{
 			Response: resp.OK(),
@@ -206,23 +185,24 @@ func (h *Handler) NewRedirect() http.HandlerFunc {
 			return
 		}
 
+		log = h.log.With("alias", alias)
+
 		url, err := h.GetURLWithCache(c.Context(), alias)
 		if err != nil {
 			switch {
 			case errors.Is(err, database.ErrURLNotFound):
-				log.Info("url not found", slog.String("alias", alias))
+				log.Info("url not found")
 				c.JSON(http.StatusNotFound, resp.Error(ErrURLNotFound))
 				return
 
 			default:
-				log.Error("failed to get URL", slog.String("alias", alias), sl.Error(err))
+				log.Error("failed to get URL", sl.Error(err))
 				c.JSON(http.StatusInternalServerError, resp.Error(ErrInternalServer))
 				return
 			}
 		}
 
 		log.Info("redirecting",
-			slog.String("alias", alias),
 			slog.String("url", url),
 		)
 

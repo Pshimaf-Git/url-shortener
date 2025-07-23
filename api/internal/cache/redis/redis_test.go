@@ -103,7 +103,8 @@ func TestGet(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful get", func(t *testing.T) {
-		mr.Set("existing-key", "existing-value")
+		err := mr.Set("existing-key", "existing-value")
+		require.NoError(t, err)
 		mr.SetTTL("existing-key", 10*time.Minute)
 
 		val, err := client.Get(ctx, "existing-key")
@@ -122,12 +123,13 @@ func TestGet(t *testing.T) {
 	})
 
 	t.Run("cancelled context", func(t *testing.T) {
-		mr.Set("ctx-key", "value")
+		err := mr.Set("ctx-key", "value")
+		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err := client.Get(ctx, "ctx-key")
+		_, err = client.Get(ctx, "ctx-key")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
 	})
@@ -141,11 +143,12 @@ func TestExpire(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful expire", func(t *testing.T) {
-		mr.Set("test-key", "test-value")
+		err := mr.Set("test-key", "test-value")
+		require.NoError(t, err)
 		initialTTL := time.Second
 		mr.SetTTL("test-key", initialTTL)
 
-		err := client.Expire(ctx, "test-key")
+		err = client.Expire(ctx, "test-key")
 		assert.NoError(t, err)
 
 		newTTL := mr.TTL("test-key")
@@ -163,12 +166,13 @@ func TestExpire(t *testing.T) {
 	})
 
 	t.Run("cancelled context", func(t *testing.T) {
-		mr.Set("ctx-key", "value")
+		err := mr.Set("ctx-key", "value")
+		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		err := client.Expire(ctx, "ctx-key")
+		err = client.Expire(ctx, "ctx-key")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
 	})

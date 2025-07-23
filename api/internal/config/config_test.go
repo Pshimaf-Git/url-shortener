@@ -145,6 +145,8 @@ func TestLoad(t *testing.T) {
 					ReadTimeout:  time.Minute,
 					WriteTimeout: time.Minute,
 					StdAliasLen:  5,
+					RequesLimit:  120,
+					WindowLength: time.Minute,
 				},
 
 				Logger: LoggerConfig{
@@ -157,6 +159,13 @@ func TestLoad(t *testing.T) {
 					Name:    "postgres",
 					User:    "postgres",
 					SSLMode: "disable",
+					Options: OptionalPostgreSQLConfig{
+						MaxConns:         10,
+						MinConns:         1,
+						MaxConnIdleTime:  time.Minute,
+						MaxConnLifetime:  time.Minute,
+						CheckHelthPeriod: time.Minute,
+					},
 				},
 
 				Redis: RedisCongig{

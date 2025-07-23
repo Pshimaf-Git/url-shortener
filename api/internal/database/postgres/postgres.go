@@ -21,8 +21,6 @@ type storage struct {
 	pool *pgxpool.Pool
 }
 
-const postgresDriver = "postgres"
-
 const pgconnUniqueConstraintViolation = "23505"
 
 func New(ctx context.Context, cfg *config.PostreSQLConfig, opts ...OptFunc) (*storage, error) {

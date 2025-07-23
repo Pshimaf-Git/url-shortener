@@ -1,0 +1,83 @@
+version: '3'
+
+vars:
+  BIN_DIR: 'bin'
+  APP_NAME: 'url-shortener.exe'
+  BUILD_DIR: 'api/cmd/app'
+  DOCKER_COMPOSE_FILE: 'docker-compose.yaml'
+
+tasks:
+  add_linter:
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+  deps:
+    desc: 'Download Go dependencies for the entire module'
+    cmds:
+      - go mod download
+
+  tidy:
+    desc: 'Tidy Go dependencies for the entire module'
+    cmds:
+      - go mod tidy
+
+  lint:
+    desc: 'Lint the Go code with golangci-lint'
+    cmds:
+      - golangci-lint run ./...
+
+  build:
+    desc: 'Build the application executable for Windows'
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.APP_NAME}} ./{{.BUILD_DIR}}
+
+  release:
+    desc: 'Build the application executable with optimizations for Windows'
+    cmds:
+      - go build -ldflags="-s -w" -o {{.BIN_DIR}}/{{.APP_NAME}} ./{{.BUILD_DIR}}
+
+  run:
+    desc: 'Run the application'
+    cmds:
+      - go run ./{{.BUILD_DIR}}
+
+  test:
+    desc: 'Run tests in the current directory (where task is called) with optional flags'
+    vars:
+      TEST_DIR: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - cmd /c "cd {{.TEST_DIR}} && go test . {{.TEST_FLAGS}}"
+
+  cover-all:
+    cmds:
+      - cmd /c "go test -coverprofile=coverage.out ./..."
+      - cmd /c "go tool cover -html=coverage.out -o coverage.html"
+      - cmd /c "start coverage.html"
+
+  cover:
+    vars:
+      COVER_DIR: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - cmd /c "go test -coverprofile=coverage.out {{.COVER_DIR}}"
+      - cmd /c "go tool cover -html=coverage.out -o coverage.html"
+      - cmd /c "start coverage.html"
+
+  docker-up:
+    desc: 'Bring up Docker services using docker-compose'
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_FILE}} up -d --build
+
+  docker-down:
+    desc: 'Bring down Docker services using docker-compose'
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_FILE}} down
+
+  migrate-up:
+    desc: 'Run database migrations up'
+    cmds:
+      - migrate -path {{.path}} -database {{.db}} up
+
+  migrate-down:
+    desc: 'Run database migrations down'
+    cmds:
+      - migrate -path {{.path}} -database {{.db}} down

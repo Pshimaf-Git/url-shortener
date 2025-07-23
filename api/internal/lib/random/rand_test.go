@@ -163,6 +163,14 @@ func TestStringRandV2(t *testing.T) {
 			},
 			wantLen: 0,
 		},
+
+		{
+			name: "large length",
+			args: args{
+				length: 1_000_000,
+			},
+			wantLen: 1_000_000,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -189,6 +197,14 @@ func TestStringCrypto(t *testing.T) {
 				length: 10,
 			},
 			wantLen: 10,
+		},
+
+		{
+			name: "large length",
+			args: args{
+				length: 1_000_000,
+			},
+			wantLen: 1_000_000,
 		},
 
 		{
@@ -298,12 +314,56 @@ func TestMustStringCrypto(t *testing.T) {
 	}
 }
 
+func BenchmarkStringCrypto(b *testing.B) {
+	lengths := []int{8, 32, 256}
+	for _, length := range lengths {
+		b.Run(fmt.Sprintf("length-%d", length), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = StringCrypto(length)
+			}
+		})
+	}
+}
+
 func BenchmarkMustStringCrypto(b *testing.B) {
 	lengths := []int{8, 32, 256}
 	for _, length := range lengths {
 		b.Run(fmt.Sprintf("length-%d", length), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = MustStringCrypto(length)
+			}
+		})
+	}
+}
+
+func BenchmarkStringRandV2(b *testing.B) {
+	lengths := []int{8, 32, 256}
+	for _, length := range lengths {
+		b.Run(fmt.Sprintf("length-%d", length), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = StringRandV2(length)
+			}
+		})
+	}
+}
+
+func BenchmarkIn64Crypto(b *testing.B) {
+	maxes := []int64{8, 32, 256, 528, 1024, 1_000_000, 1_000_000_000}
+	for _, max := range maxes {
+		b.Run(fmt.Sprintf("max-%d", max), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = Int64Crypto(max)
+			}
+		})
+	}
+}
+
+func BenchmarkInt64RandV2(b *testing.B) {
+	maxes := []int64{8, 32, 256, 528, 1024, 1_000_000, 1_000_000_000}
+	for _, max := range maxes {
+		b.Run(fmt.Sprintf("max-%d", max), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = Int64RandV2(max)
 			}
 		})
 	}

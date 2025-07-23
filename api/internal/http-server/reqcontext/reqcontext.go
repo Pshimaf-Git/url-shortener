@@ -95,15 +95,15 @@ func (c *ReqContext) Value(v any) any             { return c.r.Context().Value(v
 
 func (c *ReqContext) Body() io.ReadCloser { return c.r.Body }
 func (c *ReqContext) DecodeJSON(v any) error {
-	defer c.CloseBody()
+	defer c.CloseBody() //nolint:errcheck
 	return json.NewDecoder(c.Body()).Decode(v)
 }
 func (c *ReqContext) DecodeXML(v any) error {
-	defer c.CloseBody()
+	defer c.CloseBody() //nolint:errcheck
 	return xml.NewDecoder(c.Body()).Decode(v)
 }
 func (c *ReqContext) DecodeForm(v any) error {
-	defer c.CloseBody()
+	defer c.CloseBody() //nolint:errcheck
 	return form.NewDecoder(c.Body()).Decode(v)
 }
 

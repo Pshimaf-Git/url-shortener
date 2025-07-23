@@ -5,20 +5,24 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 )
 
 type Server struct {
 	serv *http.Server
 }
 
-type ServerOptions func(*Server)
+type ServerOption func(*Server)
 
-func BuildAddr(host, port string) string { return net.JoinHostPort(host, port) }
+func BuildAddr(host, port string) string {
+	return net.JoinHostPort(host, port)
+}
 
 func DefaultServer() (serv *Server) {
 	return &Server{
 		serv: &http.Server{
-			Handler:           nil,
+			Handler:           http.NewServeMux(),
 			MaxHeaderBytes:    http.DefaultMaxHeaderBytes,
 			ReadTimeout:       time.Minute,
 			ReadHeaderTimeout: time.Minute,
@@ -28,14 +32,26 @@ func DefaultServer() (serv *Server) {
 	}
 }
 
-func New(opts ...ServerOptions) *Server {
+func New(options ...ServerOption) *Server {
 	server := DefaultServer()
 
-	for _, fn := range opts {
-		fn(server)
+	for _, option := range options {
+		if option != nil {
+			option(server)
+		}
 	}
 
 	return server
+}
+
+func NewWithConfig(cfg *config.ServerConfig, handler http.Handler, options ...ServerOption) *Server {
+	return New(
+		WithHostPort(cfg.Host, cfg.Port),
+		WithHandler(handler),
+		WithReadTimeout(cfg.ReadTimeout),
+		WithWriteTimeout(cfg.WriteTimeout),
+		WithIdleTimeout(cfg.IdleTimeout),
+	)
 }
 
 func (s *Server) Run() error {

@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -6,188 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/cache/cachemock"
-	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database"
 	"github.com/Pshimaf-Git/url-shortener/api/internal/database/mocks"
-	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/api/resp"
-	"github.com/Pshimaf-Git/url-shortener/api/internal/lib/logger/discard"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	. "github.com/Pshimaf-Git/url-shortener/api/internal/http-server/handlers"
 )
-
-const path = "/"
-
-const (
-	noDel = int64(iota)
-	hasDel
-)
-
-var (
-	ErrInternal = errors.New("internal error")
-)
-
-var (
-	discardLogger = discard.NewDiscardLogger()
-	discardCfg    = &config.ServerConfig{}
-)
-
-func Test_isValidURL(t *testing.T) {
-	testCases := []struct {
-		name string
-		url  string
-		want bool
-	}{
-		{
-			name: "base case",
-			url:  "http://www.example.com",
-			want: true,
-		},
-
-		{
-			name: "empty url",
-			url:  "",
-			want: false,
-		},
-
-		{
-			name: "invalid url format",
-			url:  "invalid://http",
-			want: false,
-		},
-
-		{
-			name: "unkown schema",
-			url:  "unkown://www.example.com",
-			want: false,
-		},
-
-		{
-			name: "invalid control character",
-			url:  "%%%s&@&$$$~~~````/\\\\(^__6__^)###№№№№№!!\"\"'\r'\b\a",
-			want: false,
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isValidURL(tt.url))
-		})
-	}
-}
-
-func TestInitRoutes(t *testing.T) {
-	t.Run("base_case", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-
-		mockDB := mocks.NewMockDatabase(ctrl)
-		mockCache := cachemock.NewMockCache(ctrl)
-
-		h := New(mockDB, mockCache, discardCfg, discardLogger)
-		require.NotNil(t, h)
-
-		mws := []func(http.Handler) http.Handler{
-			func(next http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					t1 := time.Now()
-					discardLogger.Info("start", slog.Time("now", t1))
-					defer func() {
-						discardLogger.Info("end", slog.Duration("now", time.Since(t1)))
-					}()
-
-					next.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodDelete, "/", nil))
-				})
-			},
-		}
-
-		router := h.InitRoutes(mws...)
-		assert.NotNil(t, router)
-
-		inUse := router.Middlewares()
-		assert.Equal(t, len(mws), len(inUse))
-
-		ctrl.Finish()
-	})
-}
-
-func Test_badConfigurate(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testCases := []struct {
-		name   string
-		db     database.Database
-		cache  cache.Cache
-		logger *slog.Logger
-		cfg    *config.ServerConfig
-		want   bool
-	}{
-		{
-			name:   "happy path",
-			db:     mocks.NewMockDatabase(ctrl),
-			cache:  cachemock.NewMockCache(ctrl),
-			logger: discardLogger,
-			cfg:    discardCfg,
-			want:   false,
-		},
-		{
-			name:   "witout logger",
-			db:     mocks.NewMockDatabase(ctrl),
-			cache:  cachemock.NewMockCache(ctrl),
-			logger: nil,
-			cfg:    discardCfg,
-			want:   true,
-		},
-		{
-			name:   "witout db and cache",
-			db:     nil,
-			cache:  nil,
-			logger: discardLogger,
-			cfg:    discardCfg,
-			want:   true,
-		},
-		{
-			name:   "witout all",
-			db:     nil,
-			cache:  nil,
-			logger: nil,
-			cfg:    nil,
-			want:   true,
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			h := New(tt.db, tt.cache, tt.cfg, tt.logger)
-			assert.Equal(t, tt.want, h.badConfigurate())
-		})
-	}
-}
-
-func TestNew(t *testing.T) {
-	t.Run("new handler", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-
-		mockDB := mocks.NewMockDatabase(ctrl)
-		mockCache := cachemock.NewMockCache(ctrl)
-
-		h := New(mockDB, mockCache, discardCfg, discardLogger)
-		assert.NotNil(t, h)
-
-		ctrl.Finish()
-	})
-}
 
 func TestNewSave(t *testing.T) {
 	t.Run("new saver", func(t *testing.T) {
@@ -237,182 +71,6 @@ func TestNewRedirect(t *testing.T) {
 	})
 }
 
-func TestGetURLWithCache(t *testing.T) {
-	testCases := []struct {
-		name          string
-		alias         string
-		dbBehavior    func(m *mocks.MockDatabase, alias string)
-		cacheBehavior func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup)
-		errType       error
-		wantErr       bool
-	}{
-		{
-			name: "base case(cache hit)",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(0)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(1).Return(nil)
-			},
-			wantErr: false,
-		},
-
-		{
-			name: "base case(cache miss)",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				wg.Add(1)
-
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("", cache.ErrKeyNotExist)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(0)
-
-				c.EXPECT().Set(gomock.Any(), alias, gomock.Any()).
-					Times(1).
-					Do(func(_ context.Context, _ string, _ any) {
-						defer wg.Done()
-					}).
-					Return(nil)
-			},
-			wantErr: false,
-		},
-
-		{
-			name: "expire error",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(0)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(1).Return(cache.ErrKeyNotExist)
-			},
-			wantErr: false,
-		},
-
-		{
-			name: "get from cache error",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				wg.Add(1)
-
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("", ErrInternal)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(0)
-
-				c.EXPECT().Set(gomock.Any(), alias, gomock.Any()).
-					Times(1).
-					Do(func(_ context.Context, _ string, _ any) {
-						defer wg.Done()
-					}).
-					Return(nil)
-			},
-		},
-
-		{
-			name: "url not found in db",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(1).Return("", database.ErrURLNotFound)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("", cache.ErrKeyNotExist)
-			},
-			wantErr: true,
-			errType: database.ErrURLNotFound,
-		},
-
-		{
-			name: "internal database error",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(1).Return("", ErrInternal)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("", cache.ErrKeyNotExist)
-			},
-			wantErr: true,
-		},
-
-		{
-			name: "url not found in db but exist in cache",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(0).Return("", database.ErrURLNotFound)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(1).Return(nil)
-			},
-			wantErr: false,
-		},
-
-		{
-			name: "internal database error but exist in cache",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(0).Return("", ErrInternal)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(1).Return(nil)
-			},
-			wantErr: false,
-		},
-
-		{
-			name: "set error",
-			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().GetURl(gomock.Any(), alias).Times(1).Return("http://go.com", nil)
-			},
-			cacheBehavior: func(c *cachemock.MockCache, alias string, wg *sync.WaitGroup) {
-				wg.Add(1)
-
-				c.EXPECT().Get(gomock.Any(), alias).Times(1).Return("", cache.ErrKeyNotExist)
-				c.EXPECT().Expire(gomock.Any(), alias).Times(0)
-
-				c.EXPECT().Set(gomock.Any(), alias, gomock.Any()).
-					Times(1).
-					Do(func(_ context.Context, _ string, _ any) {
-						defer wg.Done()
-					}).
-					Return(cache.ErrKeyNotExist)
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			var wg = &sync.WaitGroup{}
-			ctrl := gomock.NewController(t)
-
-			dbMock := mocks.NewMockDatabase(ctrl)
-			mockCache := cachemock.NewMockCache(ctrl)
-
-			if tt.dbBehavior != nil {
-				tt.dbBehavior(dbMock, tt.alias)
-			}
-
-			if tt.cacheBehavior != nil {
-				tt.cacheBehavior(mockCache, tt.alias, wg)
-			}
-
-			h := New(dbMock, mockCache, discardCfg, discardLogger)
-
-			_, err := h.GetURLWithCache(context.Background(), tt.alias)
-			if !tt.wantErr {
-				assert.NoError(t, err)
-			} else {
-				if tt.errType != nil {
-					assert.ErrorIs(t, err, tt.errType)
-				}
-				assert.Error(t, err)
-			}
-
-			wg.Wait()
-		})
-	}
-}
-
 func TestSave(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -456,7 +114,7 @@ func TestSave(t *testing.T) {
 
 		{
 			name:    "empty alias, happy path(SaveGeneratedURl)",
-			request: Request{URL: "http://url.witout.alias"},
+			request: Request{URL: "http://url.without.alias"},
 			dbBehavior: func(m *mocks.MockDatabase, req Request) {
 				m.EXPECT().
 					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
@@ -468,7 +126,7 @@ func TestSave(t *testing.T) {
 
 		{
 			name:    "empty alias, max retries error(SaveGeneratedURl)",
-			request: Request{URL: "http://url.witout.alias"},
+			request: Request{URL: "http://url.without.alias"},
 			dbBehavior: func(m *mocks.MockDatabase, req Request) {
 				m.EXPECT().
 					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
@@ -480,7 +138,7 @@ func TestSave(t *testing.T) {
 
 		{
 			name:    "empty alias, interal database error(SaveGeneratedURl)",
-			request: Request{URL: "http://url.witout.alias"},
+			request: Request{URL: "http://url.without.alias"},
 			dbBehavior: func(m *mocks.MockDatabase, req Request) {
 				m.EXPECT().
 					SaveGeneratedURl(gomock.Any(), req.URL, gomock.Any(), gomock.Any()).
@@ -560,12 +218,12 @@ func TestDelete(t *testing.T) {
 			name:  "unknown alias",
 			alias: "unknown",
 			dbBehavior: func(m *mocks.MockDatabase, alias string) {
-				m.EXPECT().DeleteURL(gomock.Any(), alias).Return(noDel, database.ErrURLNotFound)
+				m.EXPECT().DeleteURL(gomock.Any(), alias).Times(1).Return(noDel, database.ErrURLNotFound)
 			},
 			caheBehavior: func(c *cachemock.MockCache, alias string) {
 				c.EXPECT().Delete(gomock.Any(), alias).Times(0)
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusNotFound,
 		},
 
 		{
@@ -589,7 +247,7 @@ func TestDelete(t *testing.T) {
 			caheBehavior: func(c *cachemock.MockCache, alias string) {
 				c.EXPECT().Delete(gomock.Any(), alias).Times(1).Return(ErrInternal)
 			},
-			expectedStatus: http.StatusInternalServerError,
+			expectedStatus: http.StatusOK,
 		},
 
 		{
@@ -760,58 +418,6 @@ func TestRedirect(t *testing.T) {
 			assert.Equal(t, tt.wantRedirect, wasRedirect(w))
 		})
 	}
-}
-
-func Test_helthy(t *testing.T) {
-	t.Run("happy_path", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, path, nil)
-		w := httptest.NewRecorder()
-
-		ctrl := gomock.NewController(t)
-
-		dbMock := mocks.NewMockDatabase(ctrl)
-		cacheMock := cachemock.NewMockCache(ctrl)
-
-		h := New(dbMock, cacheMock, discardCfg, discardLogger)
-
-		h.helthy(w, r)
-
-		body, err := io.ReadAll(w.Result().Body)
-		require.NoError(t, err)
-
-		var responce resp.Response
-		err = json.Unmarshal(body, &responce)
-
-		require.NoError(t, err)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, resp.OK(), responce)
-
-		ctrl.Finish()
-	})
-
-	t.Run("bad_configurate", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, path, nil)
-		w := httptest.NewRecorder()
-
-		h := New(nil, nil, discardCfg, discardLogger)
-
-		h.helthy(w, r)
-
-		body, err := io.ReadAll(w.Result().Body)
-		require.NoError(t, err, "read responce body")
-
-		var responce resp.Response
-		err = json.Unmarshal(body, &responce)
-		require.NoError(t, err, "json unmarshaling")
-
-		assert.Equal(t, resp.Error(ErrInternalServer), responce)
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
-	})
-}
-
-func wasRedirect(w *httptest.ResponseRecorder) bool {
-	return w.Code == http.StatusFound
 }
 
 func TestHandlers_SaveRedirectDelete_HappyPath(t *testing.T) {
@@ -1066,4 +672,8 @@ func TestHandlers_SaveRedirectDelete_BadRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+func wasRedirect(w *httptest.ResponseRecorder) bool {
+	return w.Code == http.StatusFound
 }

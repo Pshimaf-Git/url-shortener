@@ -21,6 +21,10 @@ type zapHandler struct {
 	logger *zap.Logger
 }
 
+func (h *zapHandler) Sync() error {
+	return h.logger.Sync()
+}
+
 func NewProduction(lvl slog.Level, options ...zap.Option) (*zapHandler, error) {
 	zapCfg := zap.Config{
 		Level:             zap.NewAtomicLevelAt(ConvertLevel(lvl)),
@@ -94,6 +98,14 @@ func New(env string, lvl slog.Level, options ...zap.Option) (*zapHandler, error)
 	}
 
 	return logger, err
+}
+
+func NewLogger(env string, lvl slog.Level, options ...zap.Option) (*slog.Logger, func() error, error) {
+	handler, err := New(env, lvl, options...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return slog.New(handler), handler.Sync, nil
 }
 
 func (h *zapHandler) Logger() *zap.Logger {

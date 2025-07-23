@@ -11,7 +11,7 @@ func (h *Handler) InitRoutes(middlewares ...func(http.Handler) http.Handler) *ch
 
 	router.Use(middlewares...)
 
-	router.Get("/helthy", h.helthy)
+	router.Get("/helthy", h.Helthy)
 
 	router.Get("/api/v1/url", h.NewRedirect())
 	router.Post("/api/v1/url", h.NewSave())

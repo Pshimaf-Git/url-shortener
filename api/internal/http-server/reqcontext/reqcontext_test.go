@@ -242,8 +242,11 @@ func TestValue(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
+
+	type ctxKey string
+
 	c, _ := setupTestContext()
-	key := "test-key"
+	key := ctxKey("test-key")
 	val := "test-value"
 	ctx := context.WithValue(c.Context(), key, val)
 	c.r = c.r.WithContext(ctx)

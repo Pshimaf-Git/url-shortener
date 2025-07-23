@@ -17,52 +17,62 @@ const (
 
 type OptFunc func(*pgxpool.Config)
 
-func WithMaxConns(cfg *config.PostreSQLConfig) OptFunc {
-	if cfg.Options.MaxConns <= 0 {
-		cfg.Options.MaxConns = defaultMaxConn
+func WithMaxConns(max int32) OptFunc {
+	if max <= 0 {
+		max = defaultMaxConn
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConns = int32(cfg.Options.MaxConns)
+		c.MaxConns = max
 	}
 }
 
-func WithMinConns(cfg *config.PostreSQLConfig) OptFunc {
-	if cfg.Options.MinConns <= 0 {
-		cfg.Options.MinConns = defaultMinConn
+func WithMinConns(min int32) OptFunc {
+	if min <= 0 {
+		min = defaultMinConn
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MinConns = int32(cfg.Options.MinConns)
+		c.MinConns = min
 	}
 }
 
-func WithCheckHelth(cfg *config.PostreSQLConfig) OptFunc {
-	if cfg.Options.CheckHelthPeriod <= time.Duration(0) {
-		cfg.Options.CheckHelthPeriod = defaultCheckHelthPeriod
+func WithCheckHelth(period time.Duration) OptFunc {
+	if period <= time.Duration(0) {
+		period = defaultCheckHelthPeriod
 	}
 
 	return func(c *pgxpool.Config) {
-		c.HealthCheckPeriod = cfg.Options.CheckHelthPeriod
+		c.HealthCheckPeriod = period
 	}
 }
 
-func WithMaxConnIdleTime(cfg *config.PostreSQLConfig) OptFunc {
-	if cfg.Options.MaxConnIdleTime <= time.Duration(0) {
-		cfg.Options.MaxConnIdleTime = defaultMaxConnIdleTime
+func WithMaxConnIdleTime(timeout time.Duration) OptFunc {
+	if timeout <= time.Duration(0) {
+		timeout = defaultMaxConnIdleTime
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConnIdleTime = cfg.Options.MaxConnIdleTime
+		c.MaxConnIdleTime = timeout
 	}
 }
 
-func WithMaxConnLifetime(cfg *config.PostreSQLConfig) OptFunc {
-	if cfg.Options.MaxConnLifetime <= time.Duration(0) {
-		cfg.Options.MaxConnLifetime = defaultMaxConnLifeTime
+func WithMaxConnLifetime(timeout time.Duration) OptFunc {
+	if timeout <= time.Duration(0) {
+		timeout = defaultMaxConnLifeTime
 	}
 
 	return func(c *pgxpool.Config) {
-		c.MaxConnLifetime = cfg.Options.MaxConnLifetime
+		c.MaxConnLifetime = timeout
+	}
+}
+
+func WithConfig(cfg *config.OptionalPostgreSQLConfig) OptFunc {
+	return func(c *pgxpool.Config) {
+		WithMinConns(int32(cfg.MinConns))
+		WithMaxConns(int32(cfg.MaxConns))
+		WithMaxConnLifetime(cfg.MaxConnLifetime)
+		WithMaxConnIdleTime(cfg.MaxConnIdleTime)
+		WithCheckHelth(cfg.CheckHelthPeriod)
 	}
 }

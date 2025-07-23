@@ -3,89 +3,191 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/Pshimaf-Git/url-shortener/api/internal/config"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func TestNew(t *testing.T) {
+	t.Run("without_options", func(t *testing.T) {
+		server := New()
+		require.NotNil(t, server)
+		assert.Equal(t, DefaultServer(), server)
+	})
+}
+
+func TestNewWithConfig(t *testing.T) {
+	testCases := []struct {
+		name   string
+		config *config.ServerConfig
+	}{
+		{
+			name: "default_config",
+			config: &config.ServerConfig{
+				Host:         "localhost",
+				Port:         "8080",
+				ReadTimeout:  30 * time.Second,
+				IdleTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+			},
+		},
+
+		{
+			name:   "empty_config",
+			config: &config.ServerConfig{},
+		},
+
+		{
+			name: "custom_config",
+			config: &config.ServerConfig{
+				Host:         "",
+				Port:         "9090",
+				ReadTimeout:  10 * time.Second,
+				IdleTimeout:  20 * time.Second,
+				WriteTimeout: 15 * time.Second,
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := NewWithConfig(tt.config, http.NewServeMux())
+			require.NotNil(t, server)
+			require.NotNil(t, server.serv)
+
+			host, port, err := net.SplitHostPort(server.serv.Addr)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.config.Host, host)
+			assert.Equal(t, tt.config.Port, port)
+			assert.Equal(t, tt.config.ReadTimeout, server.serv.ReadTimeout)
+			assert.Equal(t, tt.config.IdleTimeout, server.serv.IdleTimeout)
+			assert.Equal(t, tt.config.WriteTimeout, server.serv.WriteTimeout)
+			assert.Equal(t, tt.config.ReadTimeout, server.serv.ReadTimeout)
+		})
+	}
+}
+
 func TestServerOptions(t *testing.T) {
 	t.Run("WithAddr", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
-		WithAddr(":8080")(s)
-		assert.Equal(t, ":8080", s.serv.Addr)
+		addr := ":3000"
+		s := New(WithAddr(addr))
+		assert.Equal(t, addr, s.serv.Addr)
 	})
 
 	t.Run("WithTLSConfig", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		cfg := &tls.Config{}
-		WithTLSConfig(cfg)(s)
+		s := New(WithTLSConfig(cfg))
 		assert.Equal(t, cfg, s.serv.TLSConfig)
 	})
 
-	t.Run("WithProtocol", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
+	t.Run("WithProtocols", func(t *testing.T) {
 		protocols := &http.Protocols{}
-		WithProtocol(protocols)(s)
+		s := New(WithProtocols(protocols))
 		assert.Equal(t, protocols, s.serv.Protocols)
 	})
 
 	t.Run("WithDisableGeneralOptionsHandler", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
-		WithDisableGeneralOptionsHandler(true)(s)
+		s := New(WithDisableGeneralOptionsHandler(true))
 		assert.True(t, s.serv.DisableGeneralOptionsHandler)
 	})
 
 	t.Run("WithErrLogger", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		logger := log.Default()
-		WithErrLogger(logger)(s)
-		assert.Equal(t, logger, s.serv.ErrorLog)
+		s := New(WithErrLogger(logger))
+		assert.Same(t, logger, s.serv.ErrorLog)
 	})
 
 	t.Run("WithReadTimeout", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		timeout := 10 * time.Second
-		WithReadTimeout(timeout)(s)
+		s := New(WithReadTimeout(timeout))
 		assert.Equal(t, timeout, s.serv.ReadTimeout)
 	})
 
 	t.Run("WithReadHeaderTimeout", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		timeout := 5 * time.Second
-		WithReadHeaderTimeout(timeout)(s)
+		s := New(WithReadHeaderTimeout(timeout))
 		assert.Equal(t, timeout, s.serv.ReadHeaderTimeout)
 	})
 
 	t.Run("WithWriteTimeout", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		timeout := 15 * time.Second
-		WithWriteTimeout(timeout)(s)
+		s := New(WithWriteTimeout(timeout))
 		assert.Equal(t, timeout, s.serv.WriteTimeout)
 	})
 
 	t.Run("WithIdleTimeout", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		timeout := 30 * time.Second
-		WithIdleTimeout(timeout)(s)
+		s := New(WithIdleTimeout(timeout))
 		assert.Equal(t, timeout, s.serv.IdleTimeout)
 	})
 
 	t.Run("WithMaxHeaderBytes", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
-		max := 4096
-		WithMaxHeaderBytes(max)(s)
-		assert.Equal(t, max, s.serv.MaxHeaderBytes)
+		s := New(WithMaxHeaderBytes(http.DefaultMaxHeaderBytes))
+		assert.Equal(t, http.DefaultMaxHeaderBytes, s.serv.MaxHeaderBytes)
 	})
 
 	t.Run("WithHandler", func(t *testing.T) {
-		s := &Server{serv: &http.Server{}}
 		handler := http.NewServeMux()
-		WithHandler(handler)(s)
-		assert.Equal(t, handler, s.serv.Handler)
+		s := New(WithHandler(handler))
+		assert.Same(t, handler, s.serv.Handler)
+	})
+
+	t.Run("WithHostPort", func(t *testing.T) {
+		host, port := "127.0.0.1", ":8000"
+		s := New(WithHostPort(host, port))
+		assert.Equal(t, net.JoinHostPort(host, port), s.serv.Addr)
+	})
+
+	t.Run("multiply_opts", func(t *testing.T) {
+		var (
+			host, port        = "127.0.0.1:", ":80"
+			handler           = chi.NewRouter()
+			readTimeout       = time.Second
+			readHeaderTimeout = time.Duration(100000)
+			writeTimeot       = time.Hour
+			idleTimeout       = time.Millisecond * 10000
+			maxHeaderBytes    = http.DefaultMaxHeaderBytes
+			errlogger         = log.New(io.Discard, "pref", log.Lmicroseconds)
+			protocols         = &http.Protocols{}
+			tlsConfig         = &tls.Config{}
+		)
+
+		options := []ServerOption{
+			WithHostPort(host, port),
+			WithHandler(handler),
+			WithMaxHeaderBytes(maxHeaderBytes),
+			WithReadTimeout(readTimeout),
+			WithReadHeaderTimeout(readHeaderTimeout),
+			WithIdleTimeout(idleTimeout),
+			WithWriteTimeout(writeTimeot),
+			WithErrLogger(errlogger),
+			WithDisableGeneralOptionsHandler(true),
+			WithProtocols(protocols),
+			WithTLSConfig(tlsConfig),
+		}
+
+		s := New(options...)
+
+		assert.Equal(t, net.JoinHostPort(host, port), s.serv.Addr)
+		assert.Equal(t, readTimeout, s.serv.ReadTimeout)
+		assert.Equal(t, writeTimeot, s.serv.WriteTimeout)
+		assert.Equal(t, idleTimeout, s.serv.IdleTimeout)
+		assert.Equal(t, readHeaderTimeout, s.serv.ReadHeaderTimeout)
+		assert.Equal(t, maxHeaderBytes, s.serv.MaxHeaderBytes)
+
+		assert.Same(t, handler, s.serv.Handler)
+		assert.Same(t, errlogger, s.serv.ErrorLog)
+		assert.Same(t, tlsConfig, s.serv.TLSConfig)
+		assert.Same(t, protocols, s.serv.Protocols)
 	})
 }
 
@@ -142,7 +244,7 @@ func TestDefaultServer(t *testing.T) {
 	require.NotNil(t, server)
 	require.NotNil(t, server.serv)
 
-	assert.Nil(t, server.serv.Handler)
+	assert.NotNil(t, server.serv.Handler)
 	assert.Equal(t, http.DefaultMaxHeaderBytes, server.serv.MaxHeaderBytes)
 	assert.Equal(t, time.Minute, server.serv.ReadTimeout)
 	assert.Equal(t, time.Minute, server.serv.ReadHeaderTimeout)
@@ -150,61 +252,10 @@ func TestDefaultServer(t *testing.T) {
 	assert.Equal(t, time.Minute, server.serv.IdleTimeout)
 }
 
-func TestNewWithOptions(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	tests := []struct {
-		name     string
-		options  []ServerOptions
-		validate func(*testing.T, *Server)
-	}{
-		{
-			name: "WithHandler",
-			options: []ServerOptions{
-				WithHandler(handler),
-			},
-			validate: func(t *testing.T, s *Server) {
-				assert.NotNil(t, s.serv.Handler)
-			},
-		},
-		{
-			name: "WithAddress",
-			options: []ServerOptions{
-				WithAddr(":8080"),
-			},
-			validate: func(t *testing.T, s *Server) {
-				assert.Equal(t, ":8080", s.serv.Addr)
-			},
-		},
-		{
-			name: "MultipleOptions",
-			options: []ServerOptions{
-				WithAddr(":9090"),
-				WithHandler(handler),
-			},
-			validate: func(t *testing.T, s *Server) {
-				assert.Equal(t, ":9090", s.serv.Addr)
-				assert.NotNil(t, s.serv.Handler)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := New(tt.options...)
-			require.NotNil(t, server)
-			tt.validate(t, server)
-		})
-	}
-}
-
 func TestServer_Run(t *testing.T) {
 	t.Run("SuccessfulStart", func(t *testing.T) {
 		server := New(
 			WithAddr(":0"),
-			WithHandler(http.NewServeMux()),
 		)
 
 		errChan := make(chan error, 1)
@@ -227,7 +278,6 @@ func TestServer_Run(t *testing.T) {
 	t.Run("InvalidAddress", func(t *testing.T) {
 		server := New(
 			WithAddr("invalid-address-format"),
-			WithHandler(http.NewServeMux()),
 		)
 
 		err := server.Run()
@@ -239,7 +289,6 @@ func TestServer_Shutdown(t *testing.T) {
 	t.Run("SuccessfulShutdown", func(t *testing.T) {
 		server := New(
 			WithAddr(":0"),
-			WithHandler(http.NewServeMux()),
 		)
 
 		go func() {

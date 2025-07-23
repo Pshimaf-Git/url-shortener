@@ -24,7 +24,7 @@ func StringRandV2(length int) string {
 
 	result := make([]rune, length)
 	for i := range result {
-		n := Int64RandV2(int64(length))
+		n := Int64RandV2(int64(len(chars)))
 		result[i] = chars[n]
 	}
 
